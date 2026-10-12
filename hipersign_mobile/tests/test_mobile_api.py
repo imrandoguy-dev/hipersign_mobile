@@ -267,7 +267,7 @@ class TestCustomers(Base):
 		self.assertEqual(r["data"]["primary_phone"]["e164"], "+919876543210")
 
 	def test_search_respects_visibility_setting(self):
-		r = call(customers.search, self.s2, query="HM ", kind="customer")
+		r = call(customers.search, self.s2, query="HM Test Customer", kind="customer")
 		names = [i["id"] for i in r["data"]["items"]]
 		self.assertIn(self.cust, names)
 		frappe.set_user("Administrator")

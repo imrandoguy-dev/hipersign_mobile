@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-12 18:30:00.000000",
+ "creation": "2026-10-12 20:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -200,18 +200,18 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "Google Maps",
    "depends_on": "enable_google_lookup",
-   "description": "CRM Lead Source set on leads created this way (created if missing).",
+   "description": "CRM Lead Source set on leads created from Google. Leave empty to use \"Google Maps\" (created automatically).",
    "fieldname": "google_lead_source",
-   "fieldtype": "Data",
-   "label": "Lead Source For New Leads"
+   "fieldtype": "Link",
+   "label": "Lead Source For New Leads",
+   "options": "CRM Lead Source"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-12 18:30:00.000000",
+ "modified": "2026-10-12 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",
