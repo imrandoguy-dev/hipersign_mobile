@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import frappe
 
-from hipersign_mobile.api._common import choice, mobile_api, page_args, page_result
+from hipersign_mobile.api._common import (
+	choice,
+	limit_per_user,
+	mobile_api,
+	optional_str,
+	page_args,
+	page_result,
+	require_str,
+)
 from hipersign_mobile.services import activity_service as svc
+from hipersign_mobile.services import google_places
 from hipersign_mobile.services import permissions as perms
 from hipersign_mobile.services import settings as hm_settings
 from hipersign_mobile.services import timeutil
 from hipersign_mobile.services.party import party_summary
+from hipersign_mobile.services.phone import normalize_phone
 
 KINDS = ("all", "customer", "lead")
 
@@ -178,3 +188,128 @@ def _detail(doctype, name, customer_id):
 @mobile_api(methods=("GET",))
 def get_activities(doctype: str | None = None, name: str | None = None, customer_id: str | None = None):
 	return {"items": _detail(doctype, name, customer_id)["activities"]}
+
+
+# ---------------------------------------------------------------- unknown numbers / Google
+
+
+def _party_for_phone(e164: str) -> tuple[str, str] | None:
+	"""(doctype, name) of the customer or open lead that has this number, if any."""
+	digits = _phone_digits(e164)
+	if not digits:
+		return None
+	for doctype, finder in (("Customer", _customer_names), ("CRM Lead", _lead_names)):
+		names = finder(digits, None, 0, 1)
+		if names:
+			return doctype, names[0]
+	return None
+
+
+def _visible_summary(found: tuple[str, str] | None, me: str) -> dict | None:
+	if not found:
+		return None
+	doctype, name = found
+	if not perms.can_access_party(doctype, name, me):
+		return {"kind": "Hidden", "doctype": doctype, "id": name, "name": "Already in ERP (another salesperson's)"}
+	return party_summary(doctype, name)
+
+
+@mobile_api(methods=("GET",))
+def lookup_number(phone: str | None = None):
+	"""Who is this number? ERPNext first; if unknown, Google Maps (when switched on)."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	limit_per_user("lookup_number", 60, 60)
+	e164 = normalize_phone(phone, hm_settings.get().default_country_code)
+	if not e164:
+		raise frappe.ValidationError("Enter a valid phone number.")
+	party = _visible_summary(_party_for_phone(e164), me)
+	google, google_error = None, None
+	if not party and google_places.enabled():
+		try:
+			google = google_places.lookup(e164)
+		except google_places.GoogleLookupError as exc:
+			google_error = str(exc)
+	return {
+		"phone": e164,
+		"party": party,
+		"google": google,
+		"google_enabled": google_places.enabled(),
+		"google_error": google_error,
+	}
+
+
+def _lead_status() -> str | None:
+	if frappe.db.exists("CRM Lead Status", "New"):
+		return "New"
+	rows = frappe.get_all("CRM Lead Status", pluck="name", order_by="position asc", limit=1)
+	return rows[0] if rows else None
+
+
+def _lead_source(place_found: bool) -> str | None:
+	if not place_found:
+		return None
+	source = (hm_settings.get().google_lead_source or "").strip()
+	if not source:
+		return None
+	if not frappe.db.exists("CRM Lead Source", source):
+		frappe.get_doc({"doctype": "CRM Lead Source", "source_name": source}).insert(ignore_permissions=True)
+	return source
+
+
+@mobile_api(methods=("POST",))
+def create_lead(
+	phone: str | None = None,
+	name: str | None = None,
+	address: str | None = None,
+	maps_url: str | None = None,
+	place_id: str | None = None,
+):
+	"""New CRM Lead for a number that is not in ERPNext (business name from Google or typed).
+	Never duplicates: an existing customer/lead with the number or Google place is returned."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	limit_per_user("create_lead", 20, 60)
+	e164 = normalize_phone(phone, hm_settings.get().default_country_code)
+	if not e164:
+		raise frappe.ValidationError("Enter a valid phone number.")
+	name = require_str(name, "Name", 140)
+
+	found = _party_for_phone(e164)
+	if not found and place_id:
+		existing = frappe.db.get_value("CRM Lead", {"hm_google_place_id": place_id}, "name")
+		found = ("CRM Lead", existing) if existing else None
+	if found:
+		return {"party": _visible_summary(found, me), "created": False}
+
+	lead = frappe.get_doc(
+		{
+			"doctype": "CRM Lead",
+			"first_name": name,
+			"organization": name,
+			"mobile_no": e164,
+			"lead_owner": me,
+			"status": _lead_status(),
+			"source": _lead_source(bool(place_id)),
+			"hm_google_place_id": optional_str(place_id, 140),
+			"hm_google_maps_url": optional_str(maps_url, 500),
+		}
+	).insert(ignore_permissions=True)
+
+	if address or maps_url:
+		parts = []
+		if address:
+			parts.append(frappe.utils.escape_html(address))
+		if maps_url:
+			parts.append(f'<a href="{frappe.utils.escape_html(maps_url)}" target="_blank">Open in Google Maps</a>')
+		frappe.get_doc(
+			{
+				"doctype": "Comment",
+				"comment_type": "Info",
+				"reference_doctype": "CRM Lead",
+				"reference_name": lead.name,
+				"content": "Found on Google Maps: " + " - ".join(parts),
+			}
+		).insert(ignore_permissions=True)
+	frappe.local.hm_party_cache = {}
+	return {"party": party_summary("CRM Lead", lead.name), "created": True}

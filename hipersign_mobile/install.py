@@ -105,6 +105,31 @@ CRM_TASK_FIELDS = {
 }
 
 
+# Leads created from a call to a business found on Google Maps.
+CRM_LEAD_FIELDS = {
+	"CRM Lead": [
+		{
+			"fieldname": "hm_google_place_id",
+			"fieldtype": "Data",
+			"label": "Google Place ID",
+			"insert_after": "source",
+			"read_only": 1,
+			"no_copy": 1,
+			"search_index": 1,
+		},
+		{
+			"fieldname": "hm_google_maps_url",
+			"fieldtype": "Data",
+			"options": "URL",
+			"label": "Google Maps Link",
+			"insert_after": "hm_google_place_id",
+			"read_only": 1,
+			"no_copy": 1,
+		},
+	]
+}
+
+
 def after_install():
 	setup()
 
@@ -116,7 +141,9 @@ def after_migrate():
 def setup():
 	create_roles()
 	grant_task_permissions()
+	grant_lead_permissions()
 	create_custom_fields(CRM_TASK_FIELDS, update=True)
+	create_custom_fields(CRM_LEAD_FIELDS, update=True)
 	add_indexes()
 	apply_new_setting_defaults()
 	frappe.clear_cache(doctype="CRM Task")
@@ -168,6 +195,21 @@ def grant_task_permissions():
 			update_permission_property("CRM Task", role, 0, ptype, 1, validate=False)
 
 
+def grant_lead_permissions():
+	"""Salespeople create leads from calls; Frappe CRM then assigns each lead to its owner,
+	which needs the owner to be able to read and edit CRM Lead."""
+	from frappe.permissions import add_permission, update_permission_property
+
+	for role, ptypes in (
+		("Hipersign Sales", ("read", "write", "create")),
+		("Hipersign Manager", ("read", "write", "create", "report")),
+	):
+		if not frappe.db.exists("Custom DocPerm", {"parent": "CRM Lead", "role": role, "permlevel": 0}):
+			add_permission("CRM Lead", role, 0)
+		for ptype in ptypes:
+			update_permission_property("CRM Lead", role, 0, ptype, 1, validate=False)
+
+
 def add_indexes():
 	# Calendar queries: "my tasks in this date range".
 	frappe.db.add_index("CRM Task", ["assigned_to", "due_date"], index_name="hm_assigned_due")
@@ -177,7 +219,9 @@ def add_indexes():
 
 
 def before_uninstall():
-	for fieldname in [f["fieldname"] for f in CRM_TASK_FIELDS["CRM Task"]]:
-		name = frappe.db.get_value("Custom Field", {"dt": "CRM Task", "fieldname": fieldname})
-		if name:
-			frappe.delete_doc("Custom Field", name, ignore_permissions=True)
+	for fields in (CRM_TASK_FIELDS, CRM_LEAD_FIELDS):
+		for dt, rows in fields.items():
+			for fieldname in [f["fieldname"] for f in rows]:
+				name = frappe.db.get_value("Custom Field", {"dt": dt, "fieldname": fieldname})
+				if name:
+					frappe.delete_doc("Custom Field", name, ignore_permissions=True)

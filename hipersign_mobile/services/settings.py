@@ -15,6 +15,8 @@ DEFAULTS = {
 	"notification_retention_days": 60,
 	"enable_call_recordings": 1,
 	"max_recording_mb": 50,
+	"enable_google_lookup": 0,
+	"google_lead_source": "Google Maps",
 }
 
 
@@ -40,6 +42,7 @@ def get() -> frappe._dict:
 		out[key] = cint(out[key]) or DEFAULTS[key]
 	out.enable_push = cint(out.enable_push)
 	out.enable_call_recordings = cint(out.enable_call_recordings)
+	out.enable_google_lookup = cint(out.enable_google_lookup)
 	out.restrict_task_visibility = cint(out.restrict_task_visibility)
 	out.default_country_code = "".join(ch for ch in str(out.default_country_code) if ch.isdigit()) or "91"
 	return out

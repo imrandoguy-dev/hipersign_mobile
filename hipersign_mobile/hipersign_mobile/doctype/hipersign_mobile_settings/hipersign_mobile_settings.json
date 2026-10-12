@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-12 17:00:00.000000",
+ "creation": "2026-10-12 18:30:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -27,7 +27,12 @@
   "recordings_section",
   "enable_call_recordings",
   "column_break_4",
-  "max_recording_mb"
+  "max_recording_mb",
+  "google_section",
+  "enable_google_lookup",
+  "google_maps_api_key",
+  "column_break_5",
+  "google_lead_source"
  ],
  "fields": [
   {
@@ -169,12 +174,44 @@
    "fieldname": "max_recording_mb",
    "fieldtype": "Int",
    "label": "Max Recording Size (MB)"
+  },
+  {
+   "fieldname": "google_section",
+   "fieldtype": "Section Break",
+   "label": "Google Business Lookup"
+  },
+  {
+   "default": "0",
+   "description": "When a salesperson dials a number that is not in ERPNext, the business name is looked up on Google Maps and a CRM Lead is created for the call. Uses the Google Places API (New) - Google charges per lookup after the monthly free usage. Each number is looked up at most once a week.",
+   "fieldname": "enable_google_lookup",
+   "fieldtype": "Check",
+   "label": "Look Up Unknown Numbers On Google"
+  },
+  {
+   "depends_on": "enable_google_lookup",
+   "description": "From Google Cloud Console with <b>Places API (New)</b> enabled. Stored encrypted; never sent to phones.",
+   "fieldname": "google_maps_api_key",
+   "fieldtype": "Password",
+   "label": "Google Maps API Key",
+   "length": 255
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Google Maps",
+   "depends_on": "enable_google_lookup",
+   "description": "CRM Lead Source set on leads created this way (created if missing).",
+   "fieldname": "google_lead_source",
+   "fieldtype": "Data",
+   "label": "Lead Source For New Leads"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-12 17:00:00.000000",
+ "modified": "2026-10-12 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",
