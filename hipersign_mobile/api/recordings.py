@@ -171,6 +171,13 @@ def upload(
 		}
 	).insert(ignore_permissions=True)
 	doc.db_set("audio_file", file_doc.file_url, update_modified=False)
+	# Link it to the call in the call log (if that was synced first).
+	frappe.db.sql(
+		"""update `tabMobile Call Log` set recording = %(rec)s
+		where caller = %(user)s and phone = %(phone)s and ifnull(recording, '') = ''
+		and call_datetime between %(when)s - interval 3 minute and %(when)s + interval 3 minute""",
+		{"rec": doc.name, "user": me, "phone": doc.phone, "when": started},
+	)
 
 	minutes, seconds = divmod(cint(duration), 60)
 	frappe.get_doc(

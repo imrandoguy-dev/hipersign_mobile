@@ -41,7 +41,7 @@ def capabilities(user: str | None = None) -> set[str]:
 	caps: set[str] = set()
 	if "System Manager" in roles or ROLE_MANAGER in roles:
 		caps |= MANAGER_CAPS
-	if ROLE_SALES in roles:
+	if ROLE_SALES in roles or ROLE_COLD_CALLER in roles:
 		caps |= SALES_CAPS
 	if ROLE_TRAINER in roles:
 		caps |= TRAINER_CAPS

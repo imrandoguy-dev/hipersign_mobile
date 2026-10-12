@@ -69,3 +69,22 @@ def call_recording_has_permission(doc, ptype=None, user=None, debug=False):
 	if getattr(doc, "is_new", None) and doc.is_new():
 		return True
 	return doc.get("recorded_by") == user
+
+
+# ---------------------------------------------------------------- call logs (same rule as recordings)
+
+
+def call_log_query(user: str | None = None, doctype: str | None = None) -> str:
+	user = user or frappe.session.user
+	if _sees_all_recordings(user):
+		return ""
+	return f"(`tabMobile Call Log`.caller = {frappe.db.escape(user)})"
+
+
+def call_log_has_permission(doc, ptype=None, user=None, debug=False):
+	user = user or frappe.session.user
+	if _sees_all_recordings(user):
+		return True
+	if getattr(doc, "is_new", None) and doc.is_new():
+		return True
+	return doc.get("caller") == user

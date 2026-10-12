@@ -1,0 +1,207 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-10-12 22:10:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "caller",
+  "call_datetime",
+  "direction",
+  "call_type",
+  "connected",
+  "duration_seconds",
+  "column_break_1",
+  "phone",
+  "party_doctype",
+  "party",
+  "party_name",
+  "activity",
+  "recording",
+  "source",
+  "sync_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "caller",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Caller",
+   "options": "User",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "call_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Call Time",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Direction",
+   "options": "Outgoing\nIncoming\nMissed",
+   "reqd": 1
+  },
+  {
+   "description": "New: this number had never been reached before. Follow-up: an earlier call to it connected.",
+   "fieldname": "call_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Call Type",
+   "options": "New\nFollow-up"
+  },
+  {
+   "fieldname": "connected",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Connected"
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Duration (Seconds)"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Phone Number",
+   "options": "Phone",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "party_doctype",
+   "fieldtype": "Link",
+   "label": "Party Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "label": "Customer / Lead / Deal",
+   "options": "party_doctype",
+   "search_index": 1
+  },
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name"
+  },
+  {
+   "fieldname": "activity",
+   "fieldtype": "Link",
+   "label": "Activity (CRM Task)",
+   "options": "CRM Task"
+  },
+  {
+   "fieldname": "recording",
+   "fieldtype": "Link",
+   "label": "Call Recording",
+   "options": "Call Recording"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Made From",
+   "options": "Hipersign\nPhone App"
+  },
+  {
+   "fieldname": "sync_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Sync Key",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-12 22:10:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Mobile Call Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Sales",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Cold Caller",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "sort_field": "call_datetime",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "party_name"
+}

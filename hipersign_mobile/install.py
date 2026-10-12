@@ -186,6 +186,7 @@ def grant_task_permissions():
 
 	for role, ptypes in (
 		("Hipersign Sales", ("read", "write")),
+		("Hipersign Cold Caller", ("read", "write")),
 		("Hipersign Trainer", ("read", "write")),
 		("Hipersign Manager", ("read", "write", "create", "report")),
 	):
@@ -202,6 +203,7 @@ def grant_lead_permissions():
 
 	for role, ptypes in (
 		("Hipersign Sales", ("read", "write", "create")),
+		("Hipersign Cold Caller", ("read", "write", "create")),
 		("Hipersign Manager", ("read", "write", "create", "report")),
 	):
 		if not frappe.db.exists("Custom DocPerm", {"parent": "CRM Lead", "role": role, "permlevel": 0}):

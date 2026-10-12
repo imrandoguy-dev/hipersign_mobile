@@ -32,14 +32,16 @@ doc_events = {
 permission_query_conditions = {
 	"CRM Task": "hipersign_mobile.permissions.crm_task_query",
 	"Call Recording": "hipersign_mobile.permissions.call_recording_query",
+	"Mobile Call Log": "hipersign_mobile.permissions.call_log_query",
 }
 has_permission = {
 	"CRM Task": "hipersign_mobile.permissions.crm_task_has_permission",
 	"Call Recording": "hipersign_mobile.permissions.call_recording_has_permission",
+	"Mobile Call Log": "hipersign_mobile.permissions.call_log_has_permission",
 }
 
 # Audit history and notification log must survive (and never block) deleting a task.
-ignore_links_on_delete = ["Sales Activity History", "Mobile Notification", "Call Recording"]
+ignore_links_on_delete = ["Sales Activity History", "Mobile Notification", "Call Recording", "Mobile Call Log"]
 
 scheduler_events = {
 	"cron": {
