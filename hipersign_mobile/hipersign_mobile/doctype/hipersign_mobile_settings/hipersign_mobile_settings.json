@@ -17,7 +17,13 @@
   "default_reminder_minutes",
   "column_break_2",
   "max_push_attempts",
-  "notification_retention_days"
+  "notification_retention_days",
+  "updates_section",
+  "enable_app_updates",
+  "github_token",
+  "column_break_3",
+  "release_repo",
+  "release_tag"
  ],
  "fields": [
   {
@@ -98,6 +104,44 @@
    "fieldname": "notification_retention_days",
    "fieldtype": "Int",
    "label": "Keep Notification Log (Days)"
+  },
+  {
+   "fieldname": "updates_section",
+   "fieldtype": "Section Break",
+   "label": "App Updates (Android)"
+  },
+  {
+   "default": "0",
+   "description": "When ticked, the Android app offers new builds from GitHub as an in-app update.",
+   "fieldname": "enable_app_updates",
+   "fieldtype": "Check",
+   "label": "Enable In-App Updates"
+  },
+  {
+   "depends_on": "enable_app_updates",
+   "description": "Fine-grained GitHub token with read-only Contents access to the app repository. Stored encrypted.",
+   "fieldname": "github_token",
+   "fieldtype": "Password",
+   "label": "GitHub Token",
+   "length": 255
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "imrandoguy-dev/hipersign_mobile_app",
+   "depends_on": "enable_app_updates",
+   "fieldname": "release_repo",
+   "fieldtype": "Data",
+   "label": "Release Repository"
+  },
+  {
+   "default": "pilot",
+   "depends_on": "enable_app_updates",
+   "fieldname": "release_tag",
+   "fieldtype": "Data",
+   "label": "Release Tag"
   }
  ],
  "index_web_pages_for_search": 0,

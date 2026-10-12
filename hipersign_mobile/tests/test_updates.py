@@ -67,6 +67,24 @@ class TestUpdates(TestCase):
 			d = call(updates.get_download_url, self.user)
 			self.assertEqual(d["data"]["url"], "https://objects.githubusercontent.com/signed-apk")
 
+	def test_token_from_settings_page(self):
+		s = frappe.get_single("Hipersign Mobile Settings")
+		s.enable_app_updates = 1
+		s.github_token = "from-settings"
+		s.save()
+		try:
+			token, repo, tag = updates._conf()
+			self.assertEqual(token, "from-settings")
+			self.assertEqual((repo, tag), ("imrandoguy-dev/hipersign_mobile_app", "pilot"))
+			s.enable_app_updates = 0
+			s.save()
+			with self.assertRaises(updates.UpdateConfigError):
+				updates._conf()
+		finally:
+			s.reload()
+			s.enable_app_updates = 0
+			s.save()
+
 	def test_ios_never_offers_apk(self):
 		frappe.conf["hipersign_mobile_github_token"] = "x"
 		r = call(updates.check, self.user, version_code=1, platform="iOS")

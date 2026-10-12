@@ -5,10 +5,9 @@ The CI build publishes a GitHub release (tag `pilot` by default) with two assets
 The repo is private, so phones never talk to GitHub directly: this endpoint reads the
 release with a server-side token and hands the app a short-lived signed download URL.
 
-site_config:
-    hipersign_mobile_github_token   fine-grained PAT, read-only "Contents" on the app repo
-    hipersign_mobile_release_repo   default "imrandoguy-dev/hipersign_mobile_app"
-    hipersign_mobile_release_tag    default "pilot"
+Configure in ERPNext: Hipersign Mobile Settings > App Updates (tick "Enable In-App
+Updates" and paste a fine-grained GitHub token with read-only "Contents" on the app repo).
+site_config keys hipersign_mobile_github_token / _release_repo / _release_tag also work.
 """
 
 from __future__ import annotations
@@ -29,11 +28,20 @@ class UpdateConfigError(Exception):
 
 
 def _conf():
-	token = frappe.conf.get("hipersign_mobile_github_token")
+	"""Hipersign Mobile Settings > App Updates (preferred), else site_config."""
+	settings = frappe.get_cached_doc("Hipersign Mobile Settings")
+	token = None
+	if settings.get("enable_app_updates"):
+		token = settings.get_password("github_token", raise_exception=False)
+	token = token or frappe.conf.get("hipersign_mobile_github_token")
 	if not token:
-		raise UpdateConfigError("Updates are not configured on this server.")
-	repo = frappe.conf.get("hipersign_mobile_release_repo") or "imrandoguy-dev/hipersign_mobile_app"
-	tag = frappe.conf.get("hipersign_mobile_release_tag") or "pilot"
+		raise UpdateConfigError("In-app updates are not enabled on this server.")
+	repo = (
+		settings.get("release_repo")
+		or frappe.conf.get("hipersign_mobile_release_repo")
+		or "imrandoguy-dev/hipersign_mobile_app"
+	).strip()
+	tag = (settings.get("release_tag") or frappe.conf.get("hipersign_mobile_release_tag") or "pilot").strip()
 	return token, repo, tag
 
 
