@@ -256,3 +256,26 @@ class TestShareAndDirectory(TestCase):
 		self.assertEqual(by_key["895066001"]["n"], "HM Dir Customer")
 		self.assertEqual(by_key["895066001"]["t"], "Customer")
 		self.assertEqual(by_key["745033221"]["t"], "Deal")  # from TestDealsInCustomerList's contact
+
+
+class TestShareGoogleLinks(TestCase):
+	def test_share_google_chain_reaches_the_name(self):
+		hops = {
+			"https://share.google/TZqpk8ymrXIsolzM7": "https://www.google.com/share.google?q=TZqpk8ymrXIsolzM7",
+			"https://www.google.com/share.google?q=TZqpk8ymrXIsolzM7": (
+				"https://www.google.com/search?sca_esv=fd2&kgmid=/g/1trxkpcf&q=ARK+Enterprises+palakkad&shndl=30"
+			),
+		}
+
+		def fake_get(url, **kw):
+			return MagicMock(status_code=302, headers={"Location": hops[url]})
+
+		with patch.object(google_places.requests, "get", side_effect=fake_get):
+			self.assertEqual(
+				google_places.query_from_shared("https://share.google/TZqpk8ymrXIsolzM7"), "ARK Enterprises palakkad"
+			)
+
+	def test_codes_and_coordinates_are_not_names(self):
+		self.assertIsNone(google_places._name_from_url("https://www.google.com/share.google?q=TZqpk8ymrXIsolzM7"))
+		self.assertIsNone(google_places._name_from_url("https://maps.google.com/?q=10.77,76.65"))
+		self.assertEqual(google_places._name_from_url("https://maps.google.com/?q=Lulu+Mall"), "Lulu Mall")

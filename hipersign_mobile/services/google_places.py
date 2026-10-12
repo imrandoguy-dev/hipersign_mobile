@@ -132,12 +132,19 @@ def _name_from_url(url: str) -> str | None:
 	m = re.search(r"/maps/place/([^/@]+)", u.path)
 	if m:
 		return unquote_plus(m.group(1)).strip() or None
+	# google.com/share.google?q=<code>: the q here is the short-link code, not a name.
+	if u.path.rstrip("/").endswith("share.google") or "share.google" in (u.netloc or ""):
+		return None
 	for key in ("q", "query"):
 		if qs.get(key):
 			value = qs[key][0].strip()
 			# "?q=10.7,76.6" is a coordinate, not a name
-			if value and not re.fullmatch(r"[-\d.,\s]+", value):
-				return value
+			if not value or re.fullmatch(r"[-\d.,\s]+", value):
+				continue
+			# A random-looking token (letters and digits, no spaces) is a link code, not a name.
+			if " " not in value and len(value) >= 10 and re.search(r"\d", value) and re.search(r"[a-zA-Z]", value):
+				continue
+			return value
 	return None
 
 
