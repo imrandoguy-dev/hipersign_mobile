@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import frappe
 
 from hipersign_mobile.api._common import (
@@ -355,3 +357,110 @@ def create_lead(
 		).insert(ignore_permissions=True)
 	frappe.local.hm_party_cache = {}
 	return {"party": party_summary("CRM Lead", lead.name), "created": True}
+
+
+
+_PHONE_IN_TEXT = re.compile(r"(?:\+|00)?\d[\d\s().-]{7,}\d")
+
+
+@mobile_api(methods=("POST",))
+def resolve_shared(text: str | None = None):
+	"""A business shared to Hipersign from Google Search / Maps -> its phone number,
+	name and address (Google Places), plus the ERP party if the number is already known."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	limit_per_user("resolve_shared", 30, 60)
+	text = (text or "").strip()
+	if not text:
+		raise frappe.ValidationError("Nothing was shared.")
+	cc = hm_settings.get().default_country_code
+
+	place, error = None, None
+	# A shared text that already contains a phone number (e.g. a contact card) needs no Google.
+	phone = None
+	for candidate in _PHONE_IN_TEXT.findall(google_places.URL_RE.sub(" ", text)):
+		phone = normalize_phone(candidate, cc)
+		if phone:
+			break
+	if not phone:
+		if not google_places.enabled():
+			error = "Google lookup is switched off in Hipersign Mobile Settings."
+		else:
+			query = google_places.query_from_shared(text)
+			if not query:
+				error = "Could not read a business name from what was shared."
+			else:
+				try:
+					place = google_places.place_with_phone(query)
+				except google_places.GoogleLookupError as exc:
+					error = str(exc)
+				if place and place.get("phone"):
+					phone = normalize_phone(place["phone"], cc)
+				elif place:
+					error = "Google has no phone number for this business."
+				elif not error:
+					error = "Google did not find this business."
+	party = _visible_summary(_party_for_phone(phone), me) if phone else None
+	google = None
+	if place:
+		google = {k: place.get(k) for k in ("place_id", "name", "address", "maps_url")}
+	return {"phone": phone, "party": party, "google": google, "error": error}
+
+
+@mobile_api(methods=("GET",))
+def phone_directory():
+	"""Numbers of the customers, leads and deals this user may see, for the caller pop-up.
+	Key = last 9 digits (works for +91 and +971 numbers alike)."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	limit_per_user("phone_directory", 10, 60)
+	caps = perms.capabilities(me)
+	own_only = hm_settings.get().customer_scope == "Own Records" and "team_view" not in caps
+	allowed = {dt: perms.own_party_names(dt, me) for dt in perms.PARTY_DOCTYPES} if own_only else None
+
+	entries: dict[str, dict] = {}
+
+	def add(raw, doctype, name, label, kind, status=None):
+		digits = "".join(ch for ch in str(raw or "") if ch.isdigit())
+		if len(digits) < 9 or (allowed is not None and name not in allowed[doctype]):
+			return
+		key = digits[-9:]
+		if key in entries:  # customer wins over deal, deal over lead
+			return
+		entries[key] = {"k": key, "n": (label or name)[:80], "t": kind, "d": doctype, "i": name, "s": status}
+
+	for r in frappe.db.sql(
+		"select name, customer_name, mobile_no from `tabCustomer` where disabled=0", as_dict=True
+	):
+		add(r.mobile_no, "Customer", r.name, r.customer_name, "Customer")
+	for r in frappe.db.sql(
+		"""select cp.phone, dl.link_name, c.customer_name from `tabContact Phone` cp
+		join `tabDynamic Link` dl on dl.parent = cp.parent and dl.parenttype = 'Contact' and dl.link_doctype = 'Customer'
+		join `tabCustomer` c on c.name = dl.link_name and c.disabled = 0
+		where cp.parenttype = 'Contact'""",
+		as_dict=True,
+	):
+		add(r.phone, "Customer", r.link_name, r.customer_name, "Customer")
+	for r in frappe.db.sql(
+		"select name, organization, lead_name, mobile_no, phone, status from `tabCRM Deal`", as_dict=True
+	):
+		for num in (r.mobile_no, r.phone):
+			add(num, "CRM Deal", r.name, r.organization or r.lead_name, "Deal", r.status)
+	for r in frappe.db.sql(
+		"""select cc.parent, cp.phone, d.organization, d.lead_name, d.status from `tabCRM Contacts` cc
+		join `tabContact Phone` cp on cp.parent = cc.contact and cp.parenttype = 'Contact'
+		join `tabCRM Deal` d on d.name = cc.parent
+		where cc.parenttype = 'CRM Deal'""",
+		as_dict=True,
+	):
+		add(r.phone, "CRM Deal", r.parent, r.organization or r.lead_name, "Deal", r.status)
+	for r in frappe.db.sql(
+		"""select name, organization, lead_name, first_name, mobile_no, phone, status
+		from `tabCRM Lead` where converted = 0""",
+		as_dict=True,
+	):
+		for num in (r.mobile_no, r.phone):
+			add(num, "CRM Lead", r.name, r.organization or r.lead_name or r.first_name, "Lead", r.status)
+
+	items = list(entries.values())[:50000]
+	return {"items": items, "count": len(items), "generated_at": frappe.utils.now()}

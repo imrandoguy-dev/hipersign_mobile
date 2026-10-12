@@ -182,3 +182,77 @@ class TestDealsInCustomerList(TestCase):
 		self.assertEqual(r["data"]["party"]["id"], self.deal)
 		c = call(customers.create_lead, self.sales, phone="9745033221", name="Dup")
 		self.assertFalse(c["data"]["created"])
+
+
+class TestShareAndDirectory(TestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.sales = make_user("sales1")
+		make_customer("HM Dir Customer", "+91 98950 66001")
+		_set(enable_google_lookup=1, google_maps_api_key="test-key")
+
+	@classmethod
+	def tearDownClass(cls):
+		_set(enable_google_lookup=0)
+		super().tearDownClass()
+
+	def setUp(self):
+		frappe.cache.delete_keys("hipersign_mobile:gshare:")
+
+	def test_maps_share_text_finds_phone(self):
+		place = {
+			"places": [
+				{
+					"id": "ChIJ-ark",
+					"displayName": {"text": "ARK Enterprises palakkad"},
+					"formattedAddress": "Vidyut Nagar, Palakkad",
+					"googleMapsUri": "https://maps.google.com/?cid=9",
+					"internationalPhoneNumber": "+91 98950 66077",
+				}
+			]
+		}
+		text = "ARK Enterprises palakkad\nVidyut Nagar, Palakkad, Kerala 678001\nhttps://maps.app.goo.gl/AbC123"
+		with patch.object(google_places.requests, "post", return_value=_resp(data=place)) as post:
+			r = call(customers.resolve_shared, self.sales, text=text)
+		self.assertTrue(r["success"], r)
+		self.assertEqual(r["data"]["phone"], "+919895066077")
+		self.assertEqual(r["data"]["google"]["name"], "ARK Enterprises palakkad")
+		self.assertIsNone(r["data"]["error"])
+		sent = post.call_args.kwargs
+		self.assertIn("Vidyut Nagar", sent["json"]["textQuery"])  # name + address, no URL
+		self.assertNotIn("http", sent["json"]["textQuery"])
+		self.assertIn("places.internationalPhoneNumber", sent["headers"]["X-Goog-FieldMask"])
+
+	def test_link_only_share_follows_redirect_and_known_number_is_party(self):
+		redirect = MagicMock(status_code=302, headers={"Location": "https://www.google.com/maps/place/HM+Dir+Customer/@10.7,76.6,17z"})
+		place = {"places": [{"id": "x", "displayName": {"text": "HM Dir Customer"}, "nationalPhoneNumber": "098950 66001"}]}
+		with patch.object(google_places.requests, "get", return_value=redirect), patch.object(
+			google_places.requests, "post", return_value=_resp(data=place)
+		) as post:
+			r = call(customers.resolve_shared, self.sales, text="https://maps.app.goo.gl/Xyz")
+		self.assertEqual(post.call_args.kwargs["json"]["textQuery"], "HM Dir Customer")
+		self.assertEqual(r["data"]["phone"], "+919895066001")
+		self.assertEqual(r["data"]["party"]["id"], "HM Dir Customer")
+
+	def test_text_with_number_needs_no_google(self):
+		with patch.object(google_places.requests, "post") as post:
+			r = call(customers.resolve_shared, self.sales, text="Call Suresh on 98950 66001 https://x.example/@10.77,76.65")
+		post.assert_not_called()
+		self.assertEqual(r["data"]["phone"], "+919895066001")
+
+	def test_no_phone_on_google(self):
+		place = {"places": [{"id": "y", "displayName": {"text": "Quiet Shop"}}]}
+		with patch.object(google_places.requests, "post", return_value=_resp(data=place)):
+			r = call(customers.resolve_shared, self.sales, text="Quiet Shop\nPalakkad")
+		self.assertIsNone(r["data"]["phone"])
+		self.assertEqual(r["data"]["google"]["name"], "Quiet Shop")
+		self.assertIn("no phone", r["data"]["error"])
+
+	def test_phone_directory(self):
+		r = call(customers.phone_directory, self.sales)
+		self.assertTrue(r["success"], r)
+		by_key = {i["k"]: i for i in r["data"]["items"]}
+		self.assertEqual(by_key["895066001"]["n"], "HM Dir Customer")
+		self.assertEqual(by_key["895066001"]["t"], "Customer")
+		self.assertEqual(by_key["745033221"]["t"], "Deal")  # from TestDealsInCustomerList's contact
