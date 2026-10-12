@@ -118,11 +118,31 @@ def setup():
 	grant_task_permissions()
 	create_custom_fields(CRM_TASK_FIELDS, update=True)
 	add_indexes()
+	apply_new_setting_defaults()
 	frappe.clear_cache(doctype="CRM Task")
 	# install-app marks patches as done without running them, so backfill here too (idempotent).
 	from hipersign_mobile.patches.v0_1.set_activity_type_for_existing_tasks import execute as backfill_types
 
 	backfill_types()
+
+
+# Settings added in later versions: on an existing site the new fields start empty (an
+# unticked checkbox), so give them their intended default once - never overriding a saved value.
+NEW_SETTING_DEFAULTS = {"enable_call_recordings": "1", "max_recording_mb": "50"}
+
+
+def apply_new_setting_defaults():
+	doctype = "Hipersign Mobile Settings"
+	saved = set(
+		frappe.db.sql("select field from `tabSingles` where doctype=%s", doctype, pluck=True)
+	)
+	changed = False
+	for field, value in NEW_SETTING_DEFAULTS.items():
+		if field not in saved:
+			frappe.db.set_single_value(doctype, field, value)
+			changed = True
+	if changed:
+		frappe.clear_document_cache(doctype, doctype)
 
 
 def create_roles():
