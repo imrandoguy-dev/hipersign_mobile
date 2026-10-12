@@ -13,6 +13,8 @@ DEFAULTS = {
 	"default_reminder_minutes": 15,
 	"max_push_attempts": 5,
 	"notification_retention_days": 60,
+	"enable_call_recordings": 1,
+	"max_recording_mb": 50,
 }
 
 
@@ -33,9 +35,11 @@ def get() -> frappe._dict:
 		"default_reminder_minutes",
 		"max_push_attempts",
 		"notification_retention_days",
+		"max_recording_mb",
 	):
 		out[key] = cint(out[key]) or DEFAULTS[key]
 	out.enable_push = cint(out.enable_push)
+	out.enable_call_recordings = cint(out.enable_call_recordings)
 	out.restrict_task_visibility = cint(out.restrict_task_visibility)
 	out.default_country_code = "".join(ch for ch in str(out.default_country_code) if ch.isdigit()) or "91"
 	return out

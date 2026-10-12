@@ -1,0 +1,189 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "CR-.YYYY.-.#####",
+ "creation": "2026-10-12 17:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "party_doctype",
+  "party",
+  "party_name",
+  "phone",
+  "column_break_1",
+  "call_started_at",
+  "duration_seconds",
+  "recorded_by",
+  "activity",
+  "recording_section",
+  "audio_file",
+  "file_size",
+  "column_break_2",
+  "source_name",
+  "client_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "party_doctype",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Party Type",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "in_standard_filter": 1,
+   "label": "Customer / Lead",
+   "options": "party_doctype",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Phone Number",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "call_started_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Call Time",
+   "reqd": 1
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Duration (Seconds)"
+  },
+  {
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Called By",
+   "options": "User",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "activity",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Activity (CRM Task)",
+   "options": "CRM Task"
+  },
+  {
+   "fieldname": "recording_section",
+   "fieldtype": "Section Break",
+   "label": "Recording"
+  },
+  {
+   "fieldname": "audio_file",
+   "fieldtype": "Attach",
+   "label": "Audio File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_size",
+   "fieldtype": "Int",
+   "label": "File Size (Bytes)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Data",
+   "label": "File Name On Phone",
+   "read_only": 1
+  },
+  {
+   "fieldname": "client_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Client Key",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-12 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Call Recording",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 1,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Sales",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "sort_field": "call_started_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "party_name"
+}

@@ -28,11 +28,18 @@ doc_events = {
 }
 
 # Mobile-only users see only their own CRM Tasks everywhere (Desk, CRM UI, REST).
-permission_query_conditions = {"CRM Task": "hipersign_mobile.permissions.crm_task_query"}
-has_permission = {"CRM Task": "hipersign_mobile.permissions.crm_task_has_permission"}
+# Call recordings: salespeople see only their own; managers see everyone's.
+permission_query_conditions = {
+	"CRM Task": "hipersign_mobile.permissions.crm_task_query",
+	"Call Recording": "hipersign_mobile.permissions.call_recording_query",
+}
+has_permission = {
+	"CRM Task": "hipersign_mobile.permissions.crm_task_has_permission",
+	"Call Recording": "hipersign_mobile.permissions.call_recording_has_permission",
+}
 
 # Audit history and notification log must survive (and never block) deleting a task.
-ignore_links_on_delete = ["Sales Activity History", "Mobile Notification"]
+ignore_links_on_delete = ["Sales Activity History", "Mobile Notification", "Call Recording"]
 
 scheduler_events = {
 	"cron": {

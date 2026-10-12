@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-12 12:00:00.000000",
+ "creation": "2026-10-12 17:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -23,7 +23,11 @@
   "github_token",
   "column_break_3",
   "release_repo",
-  "release_tag"
+  "release_tag",
+  "recordings_section",
+  "enable_call_recordings",
+  "column_break_4",
+  "max_recording_mb"
  ],
  "fields": [
   {
@@ -142,12 +146,35 @@
    "fieldname": "release_tag",
    "fieldtype": "Data",
    "label": "Release Tag"
+  },
+  {
+   "fieldname": "recordings_section",
+   "fieldtype": "Section Break",
+   "label": "Call Recordings"
+  },
+  {
+   "default": "1",
+   "description": "Calls made from the app are matched with the phone's own call recording and uploaded here, linked to the customer / lead and the activity. The phone's built-in call recorder must be switched on.",
+   "fieldname": "enable_call_recordings",
+   "fieldtype": "Check",
+   "label": "Enable Call Recordings"
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "50",
+   "depends_on": "enable_call_recordings",
+   "fieldname": "max_recording_mb",
+   "fieldtype": "Int",
+   "label": "Max Recording Size (MB)"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-12 12:00:00.000000",
+ "modified": "2026-10-12 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",

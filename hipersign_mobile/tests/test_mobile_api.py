@@ -216,6 +216,8 @@ class TestCalendar(Base):
 
 	def test_followup_and_meeting_filters(self):
 		frappe.set_user("Administrator")
+		# Leftovers from earlier runs (persisted test DB) must not push these off page 1.
+		frappe.db.delete("CRM Task", {"assigned_to": self.s2, "status": ["not in", ["Done", "Canceled"]]})
 		f = make_task(
 			self.s2, future(1), title="F", ref=("Customer", self.cust), hm_activity_type="Follow-up"
 		)

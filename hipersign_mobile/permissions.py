@@ -46,3 +46,26 @@ def crm_task_has_permission(doc, ptype=None, user=None, debug=False):
 	if getattr(doc, "is_new", None) and doc.is_new():
 		return True  # creation is governed by role permissions + the mobile API checks
 	return doc.get("assigned_to") == user or doc.get("owner") == user
+
+
+# ---------------------------------------------------------------- call recordings
+
+
+def _sees_all_recordings(user: str) -> bool:
+	return user == "Administrator" or bool(set(frappe.get_roles(user)) & UNRESTRICTED)
+
+
+def call_recording_query(user: str | None = None, doctype: str | None = None) -> str:
+	user = user or frappe.session.user
+	if _sees_all_recordings(user):
+		return ""
+	return f"(`tabCall Recording`.recorded_by = {frappe.db.escape(user)})"
+
+
+def call_recording_has_permission(doc, ptype=None, user=None, debug=False):
+	user = user or frappe.session.user
+	if _sees_all_recordings(user):
+		return True
+	if getattr(doc, "is_new", None) and doc.is_new():
+		return True
+	return doc.get("recorded_by") == user

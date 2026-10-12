@@ -24,6 +24,7 @@ SALES_CAPS = {
 	"customers",
 	"create_activity",
 	"trial_booking",
+	"call_recordings",
 }
 MANAGER_CAPS = SALES_CAPS | {"team_view", "assign_others", "manage_trainer_slots"}
 TRAINER_CAPS = {"manage_trainer_slots"}
@@ -44,6 +45,8 @@ def capabilities(user: str | None = None) -> set[str]:
 		caps |= SALES_CAPS
 	if ROLE_TRAINER in roles:
 		caps |= TRAINER_CAPS
+	if "call_recordings" in caps and not hm_settings.get().enable_call_recordings:
+		caps.discard("call_recordings")
 	return caps
 
 
