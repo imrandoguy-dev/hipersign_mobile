@@ -19,7 +19,7 @@ from hipersign_mobile.services import timeutil
 from hipersign_mobile.services.party import party_summary
 from hipersign_mobile.services.phone import normalize_phone
 
-KINDS = ("all", "customer", "lead")
+KINDS = ("all", "customer", "lead", "deal")
 
 
 def _phone_digits(query: str) -> str | None:
@@ -108,6 +108,50 @@ def _lead_names(query: str, restrict: set[str] | None, offset: int, limit: int) 
 	)
 
 
+def _deal_names(query: str, restrict: set[str] | None, offset: int, limit: int) -> list[str]:
+	filters = {}
+	if restrict is not None:
+		if not restrict:
+			return []
+		filters["name"] = ["in", list(restrict)]
+	or_filters = None
+	if query:
+		like = f"%{query}%"
+		or_filters = [
+			["organization", "like", like],
+			["lead_name", "like", like],
+			["first_name", "like", like],
+			["email", "like", like],
+			["name", "like", like],
+		]
+		digits = _phone_digits(query)
+		if digits:
+			matches = _names_by_phone("CRM Deal", ["mobile_no", "phone"], digits)
+			# Deals whose linked contact (CRM Contacts table) has this number.
+			contacts = frappe.db.sql(
+				f"select parent from `tabContact Phone` where parenttype='Contact' and {_STRIP.format(col='phone')} like %(q)s limit 200",
+				{"q": f"%{digits}%"},
+				pluck=True,
+			)
+			if contacts:
+				matches += frappe.get_all(
+					"CRM Contacts",
+					filters={"contact": ["in", contacts], "parenttype": "CRM Deal"},
+					pluck="parent",
+				)
+			if matches:
+				or_filters.append(["name", "in", list(set(matches))])
+	return frappe.get_all(
+		"CRM Deal",
+		filters=filters,
+		or_filters=or_filters,
+		pluck="name",
+		order_by="modified desc",
+		start=offset,
+		page_length=limit,
+	)
+
+
 @mobile_api(methods=("GET",))
 def search(
 	query: str | None = None,
@@ -125,29 +169,27 @@ def search(
 	own_only = hm_settings.get().customer_scope == "Own Records" and "team_view" not in caps
 	cc = hm_settings.get().default_country_code
 
-	results = []
-	if kind == "customer":
-		names = _customer_names(
-			query, perms.own_party_names("Customer", me) if own_only else None, offset, limit + 1
-		)
-		results = [("Customer", n) for n in names]
-	elif kind == "lead":
-		names = _lead_names(
-			query, perms.own_party_names("CRM Lead", me) if own_only else None, offset, limit + 1
-		)
-		results = [("CRM Lead", n) for n in names]
+	finders = {
+		"customer": ("Customer", _customer_names),
+		"lead": ("CRM Lead", _lead_names),
+		"deal": ("CRM Deal", _deal_names),
+	}
+
+	def restrict(doctype):
+		return perms.own_party_names(doctype, me) if own_only else None
+
+	if kind != "all":
+		doctype, finder = finders[kind]
+		names = finder(query, restrict(doctype), offset, limit + 1)
+		results = [(doctype, n) for n in names]
 	else:
-		# Merged list: customers first, then leads. The cursor walks the combined sequence.
-		cust_restrict = perms.own_party_names("Customer", me) if own_only else None
-		lead_restrict = perms.own_party_names("CRM Lead", me) if own_only else None
+		# Merged list: customers, then leads, then deals. The cursor walks the combined sequence.
 		window = offset + limit + 1
-		customers = _customer_names(query, cust_restrict, 0, window)
-		leads = (
-			_lead_names(query, lead_restrict, 0, max(window - len(customers), 0))
-			if len(customers) < window
-			else []
-		)
-		merged = [("Customer", n) for n in customers] + [("CRM Lead", n) for n in leads]
+		merged = []
+		for doctype, finder in finders.values():
+			if len(merged) >= window:
+				break
+			merged += [(doctype, n) for n in finder(query, restrict(doctype), 0, window - len(merged))]
 		results = merged[offset : offset + limit + 1]
 
 	items = [party_summary(dt, name, cc=cc) for dt, name in results[:limit]]
@@ -198,7 +240,7 @@ def _party_for_phone(e164: str) -> tuple[str, str] | None:
 	digits = _phone_digits(e164)
 	if not digits:
 		return None
-	for doctype, finder in (("Customer", _customer_names), ("CRM Lead", _lead_names)):
+	for doctype, finder in (("Customer", _customer_names), ("CRM Lead", _lead_names), ("CRM Deal", _deal_names)):
 		names = finder(digits, None, 0, 1)
 		if names:
 			return doctype, names[0]

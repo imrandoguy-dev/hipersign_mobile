@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import io
 import uuid
 
@@ -35,7 +36,7 @@ def upload(user, file=None, **kw):
 		"party_doctype": "Customer",
 		"party": "HM Rec Customer",
 		"phone": "98470 12345",
-		"started_at": "2026-10-12T10:15:00+05:30",
+		"started_at": datetime.datetime.now(datetime.UTC).isoformat(),  # newest first in lists
 		"duration": 133,
 		"client_key": uuid.uuid4().hex,
 	}

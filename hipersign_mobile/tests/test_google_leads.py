@@ -138,3 +138,47 @@ class TestGoogleLeads(TestCase):
 				post.assert_not_called()
 		finally:
 			_set(enable_google_lookup=1)
+
+
+class TestDealsInCustomerList(TestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.sales = make_user("sales1")
+		name = frappe.db.get_value("CRM Deal", {"lead_name": "HM Deal Person"}, "name")
+		if not name:
+			contact = frappe.get_doc(
+				{
+					"doctype": "Contact",
+					"first_name": "HM Deal Person",
+					"phone_nos": [{"phone": "+91 97450 33221", "is_primary_mobile_no": 1}],
+				}
+			).insert(ignore_permissions=True)
+			name = (
+				frappe.get_doc(
+					{
+						"doctype": "CRM Deal",
+						"lead_name": "HM Deal Person",
+						"contacts": [{"contact": contact.name, "is_primary": 1}],
+					}
+				)
+				.insert(ignore_permissions=True)
+				.name
+			)
+			frappe.db.commit()
+		cls.deal = name
+
+	def test_deals_filter_and_search_by_contact_phone(self):
+		r = call(customers.search, self.sales, kind="deal", query="HM Deal Person")
+		self.assertTrue(r["success"], r)
+		self.assertEqual([(i["id"], i["kind"]) for i in r["data"]["items"]], [(self.deal, "Deal")])
+		by_phone = call(customers.search, self.sales, kind="all", query="97450 33221")
+		self.assertIn(self.deal, [i["id"] for i in by_phone["data"]["items"]])
+		detail = call(customers.get_detail, self.sales, doctype="CRM Deal", name=self.deal)
+		self.assertTrue(detail["success"], detail)
+
+	def test_number_of_a_deal_is_not_a_new_lead(self):
+		r = call(customers.lookup_number, self.sales, phone="9745033221")
+		self.assertEqual(r["data"]["party"]["id"], self.deal)
+		c = call(customers.create_lead, self.sales, phone="9745033221", name="Dup")
+		self.assertFalse(c["data"]["created"])
