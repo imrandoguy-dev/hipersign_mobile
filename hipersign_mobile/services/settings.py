@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+import frappe
+from frappe.utils import cint
+
+DEFAULTS = {
+	"default_country_code": "91",
+	"customer_scope": "All Records",
+	"restrict_task_visibility": 0,
+	"default_activity_minutes": 30,
+	"max_page_size": 50,
+	"enable_push": 0,
+	"default_reminder_minutes": 15,
+	"max_push_attempts": 5,
+	"notification_retention_days": 60,
+}
+
+
+def get() -> frappe._dict:
+	"""Settings with sane fall-backs (works even before the Single is saved)."""
+	try:
+		doc = frappe.get_cached_doc("Hipersign Mobile Settings")
+		values = {k: doc.get(k) for k in DEFAULTS}
+	except Exception:
+		values = {}
+	out = frappe._dict(DEFAULTS)
+	for key, value in values.items():
+		if value not in (None, ""):
+			out[key] = value
+	for key in (
+		"default_activity_minutes",
+		"max_page_size",
+		"default_reminder_minutes",
+		"max_push_attempts",
+		"notification_retention_days",
+	):
+		out[key] = cint(out[key]) or DEFAULTS[key]
+	out.enable_push = cint(out.enable_push)
+	out.restrict_task_visibility = cint(out.restrict_task_visibility)
+	out.default_country_code = "".join(ch for ch in str(out.default_country_code) if ch.isdigit()) or "91"
+	return out

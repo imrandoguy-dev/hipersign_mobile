@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-12 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "general_section",
+  "default_country_code",
+  "customer_scope",
+  "restrict_task_visibility",
+  "column_break_1",
+  "default_activity_minutes",
+  "max_page_size",
+  "notifications_section",
+  "enable_push",
+  "default_reminder_minutes",
+  "column_break_2",
+  "max_push_attempts",
+  "notification_retention_days"
+ ],
+ "fields": [
+  {
+   "fieldname": "general_section",
+   "fieldtype": "Section Break",
+   "label": "General"
+  },
+  {
+   "default": "91",
+   "description": "Digits only, without +. Applied to local numbers stored without a country code (e.g. 9087652245 becomes +919087652245).",
+   "fieldname": "default_country_code",
+   "fieldtype": "Data",
+   "label": "Default Country Code",
+   "reqd": 1
+  },
+  {
+   "default": "All Records",
+   "description": "All Records: every salesperson can search all customers and leads. Own Records: only customers/leads they own or have activities on.",
+   "fieldname": "customer_scope",
+   "fieldtype": "Select",
+   "label": "Customer Visibility",
+   "options": "All Records\nOwn Records"
+  },
+  {
+   "default": "0",
+   "description": "Salespeople always see only their own activities in the app. Tick this to also hide other employees' CRM Tasks from Hipersign Sales users who additionally have the Sales User role (Desk / CRM UI / REST). Managers are never restricted.",
+   "fieldname": "restrict_task_visibility",
+   "fieldtype": "Check",
+   "label": "Restrict Task Visibility"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "30",
+   "description": "Used when an activity has no end time.",
+   "fieldname": "default_activity_minutes",
+   "fieldtype": "Int",
+   "label": "Default Activity Duration (Minutes)"
+  },
+  {
+   "default": "50",
+   "fieldname": "max_page_size",
+   "fieldtype": "Int",
+   "label": "Max Page Size"
+  },
+  {
+   "fieldname": "notifications_section",
+   "fieldtype": "Section Break",
+   "label": "Push Notifications"
+  },
+  {
+   "default": "0",
+   "description": "Requires the Firebase service-account JSON path in site_config as <code>hipersign_mobile_fcm_credentials</code>. The credentials never leave the server.",
+   "fieldname": "enable_push",
+   "fieldtype": "Check",
+   "label": "Enable Push Notifications"
+  },
+  {
+   "default": "15",
+   "fieldname": "default_reminder_minutes",
+   "fieldtype": "Int",
+   "label": "Default Reminder (Minutes Before)"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "5",
+   "fieldname": "max_push_attempts",
+   "fieldtype": "Int",
+   "label": "Max Delivery Attempts"
+  },
+  {
+   "default": "60",
+   "fieldname": "notification_retention_days",
+   "fieldtype": "Int",
+   "label": "Keep Notification Log (Days)"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-12 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Hipersign Mobile Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 0,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

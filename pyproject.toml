@@ -1,0 +1,35 @@
+[project]
+name = "hipersign_mobile"
+authors = [
+    { name = "Hipersign Technologies", email = "dev@hipersign.com"}
+]
+description = "Backend for the Hipersign mobile app: role-based mobile APIs, activities, trial bookings and push notifications on top of ERPNext and Frappe CRM"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # "frappe~=16.0.0" # Installed and managed by bench.
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=15.0.0,<17.0.0"
+
+[deploy.dependencies.apt]
+packages = []
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP", "B", "RUF"]
+ignore = ["B904", "E501", "F401", "W191", "E101", "RUF012"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "tab"
+docstring-code-format = true
