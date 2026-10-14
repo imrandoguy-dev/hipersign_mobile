@@ -160,7 +160,16 @@ def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None
 		row = frappe.db.get_value(
 			RULE_DOCTYPE,
 			rule,
-			["name", "enabled", "trigger", TEMPLATE_FIELD, "parameters", "repeat_after_hours", "only_once"],
+			[
+				"name",
+				"enabled",
+				"trigger",
+				TEMPLATE_FIELD,
+				"parameters",
+				"repeat_after_hours",
+				"only_once",
+				"header_image",
+			],
 			as_dict=True,
 		)
 		if not row or not cint(row.enabled) or not row.get(TEMPLATE_FIELD):
@@ -190,6 +199,8 @@ def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None
 			"reference_name": party,
 			"label": label_for(row.name),
 		}
+		if row.header_image:
+			msg["attach"] = public_url(row.header_image)  # image header of the template
 		if values is not None:
 			msg["body_param"] = json.dumps({str(i + 1): v for i, v in enumerate(values)})
 		doc = frappe.get_doc(msg)
@@ -198,6 +209,18 @@ def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None
 	except Exception:
 		frappe.log_error(title=f"Hipersign WhatsApp rule {rule} -> {party_doctype} {party}")
 		return None
+
+
+def public_url(file_url: str) -> str:
+	"""Meta downloads the header image itself, so it must be a public file."""
+	if file_url.startswith("/private/"):
+		name = frappe.db.get_value("File", {"file_url": file_url}, "name")
+		if name:
+			f = frappe.get_doc("File", name)
+			f.is_private = 0
+			f.save(ignore_permissions=True)
+			return f.file_url
+	return file_url
 
 
 PLACEHOLDER = re.compile(r"\{(\w+)\}")

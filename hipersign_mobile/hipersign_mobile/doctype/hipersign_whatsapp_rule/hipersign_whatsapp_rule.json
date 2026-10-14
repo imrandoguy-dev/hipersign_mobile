@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-14 10:00:00.000000",
+ "creation": "2026-10-14 22:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -12,7 +12,8 @@
   "column_break_1",
   "parameters",
   "repeat_after_hours",
-  "only_once"
+  "only_once",
+  "header_image"
  ],
  "fields": [
   {
@@ -66,12 +67,18 @@
    "fieldname": "only_once",
    "fieldtype": "Check",
    "label": "Only Once Per Customer"
+  },
+  {
+   "description": "For templates with an image header (e.g. marketing templates): the picture sent with the message.",
+   "fieldname": "header_image",
+   "fieldtype": "Attach Image",
+   "label": "Header Image"
   }
  ],
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-10-14 10:00:00.000000",
+ "modified": "2026-10-14 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign WhatsApp Rule",
