@@ -121,21 +121,35 @@ def label_for(rule_name: str) -> str:
 	return f"Hipersign rule {rule_name}"
 
 
-def already_sent(rule, party_doctype: str, party: str) -> bool:
-	"""Did this rule already message this party (ever, or within repeat_after_hours)?"""
-	filters = {
-		"reference_doctype": party_doctype,
-		"reference_name": party,
-		"label": label_for(rule.name),
-		"type": "Outgoing",
-	}
-	if cint(rule.only_once):
-		return bool(frappe.db.exists("WhatsApp Message", filters))
-	hours = cint(rule.repeat_after_hours)
-	if hours <= 0:
-		return False
-	filters["creation"] = (">=", add_to_date(now_datetime(), hours=-hours))
-	return bool(frappe.db.exists("WhatsApp Message", filters))
+def already_sent(rule, party_doctype: str, party: str, phone: str | None = None) -> bool:
+	"""Did this rule already message this customer (ever, or within repeat_after_hours)?
+
+	Matched by the record AND by phone number, so a lead that later became a deal or
+	customer is still the same person."""
+	filters = {"label": label_for(rule.name), "type": "Outgoing"}
+	if not cint(rule.only_once):
+		hours = cint(rule.repeat_after_hours)
+		if hours <= 0:
+			return False
+		filters["creation"] = (">=", add_to_date(now_datetime(), hours=-hours))
+	same_party = frappe.get_all(
+		"WhatsApp Message",
+		filters={**filters, "reference_doctype": party_doctype, "reference_name": party},
+		limit=1,
+		pluck="name",
+	)
+	if same_party:
+		return True
+	if phone:
+		digits = "".join(ch for ch in phone if ch.isdigit())
+		if digits and frappe.get_all(
+			"WhatsApp Message",
+			filters={**filters, "to": ["in", [digits, "+" + digits]]},
+			limit=1,
+			pluck="name",
+		):
+			return True
+	return False
 
 
 def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None = None, when=None):
@@ -153,10 +167,13 @@ def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None
 			return None
 		if not cint(frappe.db.get_single_value("Hipersign Mobile Settings", "enable_whatsapp_rules")):
 			return None
-		if already_sent(row, party_doctype, party):
+		if already_sent(row, party_doctype, party, phone):
 			return None
 		template = frappe.db.get_value(
-			"WhatsApp Templates", row.get(TEMPLATE_FIELD), ["name", "sample_values", "field_names"], as_dict=True
+			"WhatsApp Templates",
+			row.get(TEMPLATE_FIELD),
+			["name", "sample_values", "field_names"],
+			as_dict=True,
 		)
 		if not template:
 			return None
@@ -216,10 +233,12 @@ def context(party_doctype, party, phone, user, when) -> dict:
 	first = frappe.db.get_value("CRM Lead", party, "first_name") if party_doctype == "CRM Lead" else None
 	first = first or (name or "").split(" ")[0]
 	when = get_datetime(when) if when else now_datetime()
-	sp = frappe.db.get_value("User", user, ["full_name", "mobile_no", "phone"], as_dict=True) if user else None
-	company = (user and frappe.defaults.get_user_default("Company", user)) or frappe.defaults.get_global_default(
-		"company"
+	sp = (
+		frappe.db.get_value("User", user, ["full_name", "mobile_no", "phone"], as_dict=True) if user else None
 	)
+	company = (
+		user and frappe.defaults.get_user_default("Company", user)
+	) or frappe.defaults.get_global_default("company")
 	return {
 		"name": name,
 		"first_name": first,

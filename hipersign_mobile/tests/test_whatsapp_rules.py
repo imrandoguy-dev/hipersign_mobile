@@ -111,3 +111,22 @@ class TestWhatsAppRules(TestCase):
 	def test_send_is_noop_without_frappe_whatsapp(self):
 		with patch.object(wr, "available", return_value=False):
 			self.assertIsNone(wr.send("r-any", "Customer", self.customer, E164))
+
+	def test_once_per_customer_also_matches_phone(self):
+		r = frappe._dict(name="r-mkt", only_once=1, repeat_after_hours=24)
+		calls_seen = []
+
+		def fake_get_all(doctype, filters=None, **kw):
+			calls_seen.append(filters)
+			# Sent earlier to the same number while it was a lead.
+			return ["WA-1"] if "to" in filters else []
+
+		with patch.object(frappe, "get_all", side_effect=fake_get_all):
+			self.assertTrue(wr.already_sent(r, "CRM Deal", "DEAL-1", E164))
+		self.assertNotIn("creation", calls_seen[0])  # only-once: no time window
+		self.assertEqual(calls_seen[1]["to"], ["in", [E164[1:], E164]])
+
+		with patch.object(frappe, "get_all", return_value=[]):
+			self.assertFalse(wr.already_sent(r, "CRM Deal", "DEAL-1", E164))
+		r.only_once, r.repeat_after_hours = 0, 0
+		self.assertFalse(wr.already_sent(r, "CRM Deal", "DEAL-1", E164))
