@@ -145,6 +145,7 @@ def setup():
 	create_custom_fields(CRM_TASK_FIELDS, update=True)
 	create_custom_fields(CRM_LEAD_FIELDS, update=True)
 	add_indexes()
+	add_whatsapp_template_field()
 	apply_new_setting_defaults()
 	frappe.clear_cache(doctype="CRM Task")
 	# install-app marks patches as done without running them, so backfill here too (idempotent).
@@ -170,6 +171,29 @@ def apply_new_setting_defaults():
 			changed = True
 	if changed:
 		frappe.clear_document_cache(doctype, doctype)
+
+
+def add_whatsapp_template_field():
+	"""The rule's template is a Link to Frappe WhatsApp's templates - only when that app is installed."""
+	if not frappe.db.exists("DocType", "WhatsApp Templates"):
+		return
+	create_custom_fields(
+		{
+			"Hipersign WhatsApp Rule": [
+				{
+					"fieldname": "whatsapp_template",
+					"fieldtype": "Link",
+					"label": "WhatsApp Template",
+					"options": "WhatsApp Templates",
+					"insert_after": "trigger",
+					"in_list_view": 1,
+					"columns": 3,
+					"description": "An APPROVED template from WhatsApp Templates.",
+				}
+			]
+		},
+		update=True,
+	)
 
 
 def create_roles():
@@ -227,3 +251,6 @@ def before_uninstall():
 				name = frappe.db.get_value("Custom Field", {"dt": dt, "fieldname": fieldname})
 				if name:
 					frappe.delete_doc("Custom Field", name, ignore_permissions=True)
+	name = frappe.db.get_value("Custom Field", {"dt": "Hipersign WhatsApp Rule", "fieldname": "whatsapp_template"})
+	if name:
+		frappe.delete_doc("Custom Field", name, ignore_permissions=True)

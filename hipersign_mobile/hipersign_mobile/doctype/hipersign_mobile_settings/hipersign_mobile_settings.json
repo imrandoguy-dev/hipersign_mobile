@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-12 20:00:00.000000",
+ "creation": "2026-10-14 10:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -32,7 +32,10 @@
   "enable_google_lookup",
   "google_maps_api_key",
   "column_break_5",
-  "google_lead_source"
+  "google_lead_source",
+  "whatsapp_section",
+  "enable_whatsapp_rules",
+  "whatsapp_rules"
  ],
  "fields": [
   {
@@ -206,12 +209,32 @@
    "fieldtype": "Link",
    "label": "Lead Source For New Leads",
    "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "whatsapp_section",
+   "fieldtype": "Section Break",
+   "label": "Automatic WhatsApp Messages"
+  },
+  {
+   "default": "0",
+   "description": "Sends an approved WhatsApp template through the Frappe WhatsApp app (WhatsApp Account must be set up there) after a salesperson's call or when a new lead is created. Every message is saved as a WhatsApp Message, linked to the customer / lead / deal.",
+   "fieldname": "enable_whatsapp_rules",
+   "fieldtype": "Check",
+   "label": "Send Automatic WhatsApp Messages"
+  },
+  {
+   "depends_on": "enable_whatsapp_rules",
+   "description": "Parameters: one value per {{1}}, {{2}}... of the template, separated by commas. Use {name}, {first_name}, {salesperson}, {salesperson_phone}, {phone}, {company}, {date}, {time} or plain text. Leave empty to fill every parameter with the customer's name.",
+   "fieldname": "whatsapp_rules",
+   "fieldtype": "Table",
+   "label": "WhatsApp Rules",
+   "options": "Hipersign WhatsApp Rule"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-12 20:00:00.000000",
+ "modified": "2026-10-14 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",

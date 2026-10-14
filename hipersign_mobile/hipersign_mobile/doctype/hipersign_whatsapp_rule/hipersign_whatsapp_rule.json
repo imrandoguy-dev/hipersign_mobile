@@ -1,0 +1,83 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-10-14 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "trigger",
+  "parties",
+  "column_break_1",
+  "parameters",
+  "repeat_after_hours",
+  "only_once"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "columns": 3,
+   "description": "Calls: outgoing calls made by salespeople (from Hipersign or the phone app) to a known customer, lead or deal.",
+   "fieldname": "trigger",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "When",
+   "options": "After any call\nAfter call - not connected\nAfter call - connected\nNew lead created",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "default": "Customers, Leads and Deals",
+   "depends_on": "eval:doc.trigger != 'New lead created'",
+   "fieldname": "parties",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Send To",
+   "options": "Customers, Leads and Deals\nLeads only\nDeals only\nCustomers only"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Comma separated, one per template variable, e.g. {name}, {salesperson}",
+   "fieldname": "parameters",
+   "fieldtype": "Data",
+   "label": "Template Parameters",
+   "length": 500
+  },
+  {
+   "default": "24",
+   "description": "Skip if this rule already messaged the same customer within these hours. 0 = no limit.",
+   "fieldname": "repeat_after_hours",
+   "fieldtype": "Int",
+   "label": "Don't Repeat Within (Hours)"
+  },
+  {
+   "default": "0",
+   "fieldname": "only_once",
+   "fieldtype": "Check",
+   "label": "Only Once Per Customer"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-14 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Hipersign WhatsApp Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

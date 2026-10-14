@@ -19,7 +19,7 @@ from hipersign_mobile.api._common import limit_per_user, mobile_api
 from hipersign_mobile.api.customers import _party_for_phone
 from hipersign_mobile.services import permissions as perms
 from hipersign_mobile.services import settings as hm_settings
-from hipersign_mobile.services import timeutil
+from hipersign_mobile.services import timeutil, whatsapp_rules
 from hipersign_mobile.services.party import party_summary
 from hipersign_mobile.services.phone import normalize_phone
 
@@ -119,7 +119,7 @@ def sync(calls: str | list | None = None):
 		if activity and not frappe.db.exists("CRM Task", activity):
 			activity = None
 		summary = party_summary(party_doctype, party) if party else None
-		frappe.get_doc(
+		log = frappe.get_doc(
 			{
 				"doctype": "Mobile Call Log",
 				"caller": me,
@@ -140,6 +140,10 @@ def sync(calls: str | list | None = None):
 		).insert(ignore_permissions=True)
 		if connected:
 			_promote_later_calls(phone, party_doctype, party, when)
+		try:
+			whatsapp_rules.after_call(log)
+		except Exception:
+			frappe.log_error(title="Hipersign WhatsApp rule (after call)")
 		saved += 1
 	return {"saved": saved, "skipped": skipped}
 

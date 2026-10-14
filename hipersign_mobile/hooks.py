@@ -25,6 +25,9 @@ doc_events = {
 	"User": {
 		"on_update": "hipersign_mobile.events.user.on_update",
 	},
+	"CRM Lead": {
+		"after_insert": "hipersign_mobile.services.whatsapp_rules.after_lead_insert",
+	},
 }
 
 # Mobile-only users see only their own CRM Tasks everywhere (Desk, CRM UI, REST).
