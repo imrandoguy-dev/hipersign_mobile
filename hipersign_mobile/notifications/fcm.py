@@ -36,9 +36,11 @@ class FCMConfigError(Exception):
 
 
 def _credentials() -> dict:
-	conf = frappe.conf.get("hipersign_mobile_fcm_credentials")
+	conf = frappe.conf.get("hipersign_mobile_fcm_credentials") or _uploaded_key()
 	if not conf:
-		raise FCMConfigError("hipersign_mobile_fcm_credentials is not set in site_config.")
+		raise FCMConfigError(
+			"Upload the Firebase service account key in Hipersign Mobile Settings > Push Notifications."
+		)
 	if isinstance(conf, dict):
 		creds = conf
 	else:
@@ -51,6 +53,25 @@ def _credentials() -> dict:
 		if not creds.get(key):
 			raise FCMConfigError(f"FCM credentials are missing '{key}'.")
 	return creds
+
+
+def _uploaded_key() -> dict | None:
+	"""The key file uploaded in Hipersign Mobile Settings (Firebase Service Account Key)."""
+	url = frappe.db.get_single_value("Hipersign Mobile Settings", "fcm_key_file")
+	if not url:
+		return None
+	name = frappe.db.get_value("File", {"file_url": url}, "name")
+	if not name:
+		raise FCMConfigError("The uploaded Firebase key file was not found - upload it again.")
+	try:
+		content = frappe.get_doc("File", name).get_content()
+		if isinstance(content, bytes):
+			content = content.decode("utf-8")
+		return json.loads(content)
+	except Exception as exc:
+		raise FCMConfigError(
+			f"The uploaded Firebase key is not a valid JSON key file ({type(exc).__name__})."
+		)
 
 
 def is_configured() -> bool:

@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-14 10:00:00.000000",
+ "creation": "2026-10-14 23:40:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -14,6 +14,7 @@
   "max_page_size",
   "notifications_section",
   "enable_push",
+  "fcm_key_file",
   "default_reminder_minutes",
   "column_break_2",
   "max_push_attempts",
@@ -90,10 +91,17 @@
   },
   {
    "default": "0",
-   "description": "Requires the Firebase service-account JSON path in site_config as <code>hipersign_mobile_fcm_credentials</code>. The credentials never leave the server.",
+   "description": "Sends reminders, assignments and changes to phones through Firebase.",
    "fieldname": "enable_push",
    "fieldtype": "Check",
    "label": "Enable Push Notifications"
+  },
+  {
+   "depends_on": "enable_push",
+   "description": "Firebase console > Project settings > Service accounts > Generate new private key. Upload the downloaded .json file here (keep it Private). It never leaves the server.",
+   "fieldname": "fcm_key_file",
+   "fieldtype": "Attach",
+   "label": "Firebase Service Account Key (JSON)"
   },
   {
    "default": "15",
@@ -234,7 +242,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-14 10:00:00.000000",
+ "modified": "2026-10-14 23:40:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",
