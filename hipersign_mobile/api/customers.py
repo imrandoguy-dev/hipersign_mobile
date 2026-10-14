@@ -337,6 +337,7 @@ def create_lead(
 			"source": _lead_source(bool(place_id)),
 			"hm_google_place_id": optional_str(place_id, 140),
 			"hm_google_maps_url": optional_str(maps_url, 500),
+			"hm_address": optional_str(address, 500),
 		}
 	).insert(ignore_permissions=True)
 

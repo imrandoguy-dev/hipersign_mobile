@@ -113,7 +113,12 @@ def _customer(name, cc, full):
 	}
 	if full:
 		out.update(
-			{"territory": c.territory, "disabled": bool(c.disabled), "customer_group": c.customer_group}
+			{
+				"territory": c.territory,
+				"disabled": bool(c.disabled),
+				"customer_group": c.customer_group,
+				"location": _customer_location(name),
+			}
 		)
 	return out
 
@@ -154,7 +159,13 @@ def _lead(name, cc, full):
 		"primary_phone": phones[0] if phones else None,
 	}
 	if full:
-		out.update({"organization": lead.organization, "owner": lead.lead_owner})
+		out.update(
+			{
+				"organization": lead.organization,
+				"owner": lead.lead_owner,
+				"location": _location("CRM Lead", name),
+			}
+		)
 	return out
 
 
@@ -200,5 +211,63 @@ def _deal(name, cc, full):
 		"primary_phone": phones[0] if phones else None,
 	}
 	if full:
-		out.update({"owner": d.deal_owner})
+		out.update({"owner": d.deal_owner, "location": _deal_location(name)})
 	return out
+
+
+# ---------------------------------------------------------------- location (address + Google Maps)
+
+LOCATION_FIELDS = ("hm_address", "hm_google_maps_url", "hm_google_place_id")
+
+
+def _location_dict(address=None, maps_url=None, place_id=None) -> dict | None:
+	address = (address or "").strip() or None
+	if not (address or maps_url or place_id):
+		return None
+	return {"address": address, "maps_url": maps_url or None, "place_id": place_id or None}
+
+
+def _location(doctype: str, name: str) -> dict | None:
+	meta = frappe.get_meta(doctype)
+	fields = [f for f in LOCATION_FIELDS if meta.has_field(f)]
+	if not fields:
+		return None
+	row = frappe.db.get_value(doctype, name, fields, as_dict=True) or {}
+	return _location_dict(row.get("hm_address"), row.get("hm_google_maps_url"), row.get("hm_google_place_id"))
+
+
+def _deal_location(name: str) -> dict | None:
+	"""The deal's own address, else the lead it came from."""
+	own = _location("CRM Deal", name)
+	lead = frappe.db.get_value("CRM Deal", name, "lead")
+	from_lead = _location("CRM Lead", lead) if lead and frappe.db.exists("CRM Lead", lead) else None
+	if not own:
+		return from_lead
+	if from_lead:
+		for k, v in from_lead.items():
+			own[k] = own.get(k) or v
+	return own
+
+
+def _customer_location(name: str) -> dict | None:
+	"""The customer's ERPNext address (primary first)."""
+	rows = frappe.db.sql(
+		"""select a.address_line1, a.address_line2, a.city, a.state, a.pincode, a.country
+		from `tabAddress` a join `tabDynamic Link` dl
+			on dl.parent = a.name and dl.parenttype = 'Address'
+		where dl.link_doctype = 'Customer' and dl.link_name = %s and ifnull(a.disabled, 0) = 0
+		order by a.is_primary_address desc, a.is_shipping_address desc, a.modified desc limit 1""",
+		name,
+		as_dict=True,
+	)
+	if not rows:
+		return None
+	r = rows[0]
+	parts = [r.address_line1, r.address_line2, r.city, r.state, r.pincode, r.country]
+	seen, clean = set(), []
+	for p in parts:
+		p = (p or "").strip()
+		if p and p.lower() not in seen:
+			seen.add(p.lower())
+			clean.append(p)
+	return _location_dict(", ".join(clean))

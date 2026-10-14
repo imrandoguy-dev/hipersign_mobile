@@ -126,7 +126,40 @@ CRM_LEAD_FIELDS = {
 			"read_only": 1,
 			"no_copy": 1,
 		},
-	]
+		{
+			"fieldname": "hm_address",
+			"fieldtype": "Small Text",
+			"label": "Address",
+			"insert_after": "hm_google_maps_url",
+			"description": "Shown in the Hipersign app with a Directions button (Google Maps).",
+		},
+	],
+	# Same fields on deals: Frappe CRM copies same-named fields when a lead becomes a deal.
+	"CRM Deal": [
+		{
+			"fieldname": "hm_google_place_id",
+			"fieldtype": "Data",
+			"label": "Google Place ID",
+			"insert_after": "source",
+			"read_only": 1,
+			"no_copy": 1,
+		},
+		{
+			"fieldname": "hm_google_maps_url",
+			"fieldtype": "Data",
+			"options": "URL",
+			"label": "Google Maps Link",
+			"insert_after": "hm_google_place_id",
+			"read_only": 1,
+			"no_copy": 1,
+		},
+		{
+			"fieldname": "hm_address",
+			"fieldtype": "Small Text",
+			"label": "Address",
+			"insert_after": "hm_google_maps_url",
+		},
+	],
 }
 
 
@@ -146,6 +179,7 @@ def setup():
 	create_custom_fields(CRM_LEAD_FIELDS, update=True)
 	add_indexes()
 	add_whatsapp_template_field()
+	backfill_lead_addresses()
 	apply_new_setting_defaults()
 	frappe.clear_cache(doctype="CRM Task")
 	# install-app marks patches as done without running them, so backfill here too (idempotent).
@@ -161,9 +195,7 @@ NEW_SETTING_DEFAULTS = {"enable_call_recordings": "1", "max_recording_mb": "50"}
 
 def apply_new_setting_defaults():
 	doctype = "Hipersign Mobile Settings"
-	saved = set(
-		frappe.db.sql("select field from `tabSingles` where doctype=%s", doctype, pluck=True)
-	)
+	saved = set(frappe.db.sql("select field from `tabSingles` where doctype=%s", doctype, pluck=True))
 	changed = False
 	for field, value in NEW_SETTING_DEFAULTS.items():
 		if field not in saved:
@@ -171,6 +203,27 @@ def apply_new_setting_defaults():
 			changed = True
 	if changed:
 		frappe.clear_document_cache(doctype, doctype)
+
+
+def backfill_lead_addresses():
+	"""Leads created from Google before the Address field existed: the address is in the
+	"Found on Google Maps: ..." comment. Copy it once (never overwrites a typed address)."""
+	import html
+	import re
+
+	rows = frappe.db.sql(
+		"""select c.reference_name, c.content from `tabComment` c
+		join `tabCRM Lead` l on l.name = c.reference_name
+		where c.reference_doctype = 'CRM Lead' and c.content like 'Found on Google Maps:%%'
+		and ifnull(l.hm_address, '') = ''""",
+		as_dict=True,
+	)
+	for r in rows:
+		text = r.content[len("Found on Google Maps:") :]
+		text = re.split(r"\s+-\s+<a\s", text, maxsplit=1)[0]
+		text = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
+		if text and not text.startswith("Open in Google Maps"):
+			frappe.db.set_value("CRM Lead", r.reference_name, "hm_address", text[:500], update_modified=False)
 
 
 def add_whatsapp_template_field():
@@ -251,6 +304,8 @@ def before_uninstall():
 				name = frappe.db.get_value("Custom Field", {"dt": dt, "fieldname": fieldname})
 				if name:
 					frappe.delete_doc("Custom Field", name, ignore_permissions=True)
-	name = frappe.db.get_value("Custom Field", {"dt": "Hipersign WhatsApp Rule", "fieldname": "whatsapp_template"})
+	name = frappe.db.get_value(
+		"Custom Field", {"dt": "Hipersign WhatsApp Rule", "fieldname": "whatsapp_template"}
+	)
 	if name:
 		frappe.delete_doc("Custom Field", name, ignore_permissions=True)
