@@ -130,3 +130,29 @@ class TestWhatsAppRules(TestCase):
 			self.assertFalse(wr.already_sent(r, "CRM Deal", "DEAL-1", E164))
 		r.only_once, r.repeat_after_hours = 0, 0
 		self.assertFalse(wr.already_sent(r, "CRM Deal", "DEAL-1", E164))
+
+	def test_after_call_screen_status(self):
+		frappe.cache.delete_value(wr._outcome_key("Customer", self.customer))
+		started = _at(5)
+		self._sync([{"key": f"{self.p}9", "number": NUM, "started_at": started, "duration": 0, "direction": "outgoing"}])
+		with patch.object(wr, "_all_rules", return_value=self.rules):
+			r = call(calls.whatsapp_status, self.caller, doctype="Customer", name=self.customer, since=started)
+		self.assertTrue(r["success"], r)
+		self.assertTrue(r["data"]["enabled"])
+		self.assertEqual(sorted(i["rule"] for i in r["data"]["items"]), ["r-any", "r-missed"])
+		self.assertEqual({i["status"] for i in r["data"]["items"]}, {"queued"})
+		self.assertEqual(r["data"]["items"][0]["title"], "Follow up")
+
+		# the background job's outcome replaces "queued"
+		wr.record("r-any", "Customer", self.customer, "skipped", template="follow_up")
+		with patch.object(wr, "available", return_value=False):
+			wr.send("r-missed", "Customer", self.customer, E164)
+		items = {i["rule"]: i for i in wr.outcomes("Customer", self.customer)}
+		self.assertEqual(items["r-any"]["status"], "skipped")
+		self.assertEqual(items["r-missed"]["status"], "failed")
+		self.assertIn("not set up", items["r-missed"]["error"])
+
+	def test_status_only_for_rules_that_apply(self):
+		with patch.object(wr, "_all_rules", return_value=[rule("x", wr.AFTER_ANY, parties="Leads only")]):
+			self.assertFalse(wr.call_rules_enabled("Customer"))
+			self.assertTrue(wr.call_rules_enabled("CRM Lead"))

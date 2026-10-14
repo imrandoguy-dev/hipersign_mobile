@@ -10,6 +10,7 @@ call); every call after a connected call is a "Follow-up".
 
 from __future__ import annotations
 
+import datetime
 import json
 
 import frappe
@@ -163,3 +164,24 @@ def today_summary():
 		as_dict=True,
 	)[0]
 	return {k: cint(v) for k, v in r.items()}
+
+
+@mobile_api(methods=("GET",))
+def whatsapp_status(doctype: str | None = None, name: str | None = None, since: str | None = None):
+	"""For the after-call screen: what happened to the automatic WhatsApp messages of this
+	customer / lead / deal since `since` (ISO time the call started)."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	if doctype not in perms.PARTY_DOCTYPES or not name:
+		raise frappe.ValidationError("Choose a customer, lead or deal.")
+	perms.require_party(doctype, name, me)
+	when = None
+	if since:
+		try:
+			when = timeutil.parse_client_datetime(since, me) - datetime.timedelta(minutes=2)
+		except frappe.ValidationError:
+			when = None
+	return {
+		"enabled": whatsapp_rules.call_rules_enabled(doctype),
+		"items": whatsapp_rules.outcomes(doctype, name, when),
+	}

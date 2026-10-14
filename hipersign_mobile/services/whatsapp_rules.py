@@ -101,6 +101,7 @@ def after_lead_insert(doc, method=None):
 
 
 def _queue(rule, party_doctype, party, phone, user, when):
+	record(rule.name, party_doctype, party, "queued", template=rule.get(TEMPLATE_FIELD))
 	frappe.enqueue(
 		"hipersign_mobile.services.whatsapp_rules.send",
 		queue="short",
@@ -153,9 +154,13 @@ def already_sent(rule, party_doctype: str, party: str, phone: str | None = None)
 
 
 def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None = None, when=None):
-	"""Background job: create the WhatsApp Message (Frappe WhatsApp sends it on insert)."""
+	"""Background job: create the WhatsApp Message (Frappe WhatsApp sends it on insert).
+	The outcome is remembered for the app's after-call screen (see outcomes())."""
+	doc = None
+	template_name = None
 	try:
 		if not available():
+			record(rule, party_doctype, party, "failed", error="WhatsApp is not set up on this site")
 			return None
 		row = frappe.db.get_value(
 			RULE_DOCTYPE,
@@ -176,15 +181,18 @@ def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None
 			return None
 		if not cint(frappe.db.get_single_value("Hipersign Mobile Settings", "enable_whatsapp_rules")):
 			return None
+		template_name = row.get(TEMPLATE_FIELD)
 		if already_sent(row, party_doctype, party, phone):
+			record(rule, party_doctype, party, "skipped", template=template_name)
 			return None
 		template = frappe.db.get_value(
 			"WhatsApp Templates",
-			row.get(TEMPLATE_FIELD),
+			template_name,
 			["name", "sample_values", "field_names"],
 			as_dict=True,
 		)
 		if not template:
+			record(rule, party_doctype, party, "failed", template=template_name, error="Template not found")
 			return None
 		values = build_parameters(row.parameters, template, party_doctype, party, phone, user, when)
 		msg = {
@@ -205,10 +213,78 @@ def send(rule: str, party_doctype: str, party: str, phone: str, user: str | None
 			msg["body_param"] = json.dumps({str(i + 1): v for i, v in enumerate(values)})
 		doc = frappe.get_doc(msg)
 		doc.insert(ignore_permissions=True)
+		record(rule, party_doctype, party, "sent", template=template_name)
 		return doc.name
-	except Exception:
+	except Exception as e:
 		frappe.log_error(title=f"Hipersign WhatsApp rule {rule} -> {party_doctype} {party}")
+		if doc is not None and doc.get("message_id"):
+			# Meta accepted it; another app's hook failed afterwards. Keep the record so
+			# "only once" knows it went out.
+			frappe.db.commit()
+			record(rule, party_doctype, party, "sent", template=template_name)
+			return doc.name
+		record(rule, party_doctype, party, "failed", template=template_name, error=_short(e))
 		return None
+
+
+def _short(e: Exception) -> str:
+	text = re.sub(r"<[^>]+>", "", str(e) or e.__class__.__name__).strip()
+	return (text[:157] + "...") if len(text) > 160 else text
+
+
+# ---------------------------------------------------------------- outcomes for the app
+
+OUTCOME_TTL = 3 * 3600
+
+
+def _outcome_key(party_doctype, party):
+	return f"hm_wa_outcome:{party_doctype}:{party}"
+
+
+def record(rule, party_doctype, party, status, template=None, error=None):
+	"""Remember what happened to this rule for this party: queued | sent | skipped | failed."""
+	try:
+		key = _outcome_key(party_doctype, party)
+		data = frappe.cache.get_value(key) or {}
+		data[str(rule)] = {
+			"rule": str(rule),
+			"status": status,
+			"template": template,
+			"title": template_title(template),
+			"error": error,
+			"at": now_datetime().isoformat(),
+		}
+		frappe.cache.set_value(key, data, expires_in_sec=OUTCOME_TTL)
+	except Exception:
+		pass  # only used for the app's status line
+
+
+def outcomes(party_doctype, party, since=None) -> list[dict]:
+	data = frappe.cache.get_value(_outcome_key(party_doctype, party)) or {}
+	items = list(data.values())
+	if since:
+		since = get_datetime(since)
+		items = [i for i in items if get_datetime(i["at"]) >= since]
+	return sorted(items, key=lambda i: i["at"])
+
+
+def template_title(template: str | None) -> str | None:
+	"""hipersign_whatsapp_launch_2-en -> Hipersign whatsapp launch 2"""
+	if not template:
+		return None
+	base = frappe.db.get_value("WhatsApp Templates", template, "template_name") if available() else None
+	base = base or re.sub(r"-[a-z]{2}(_[A-Z]{2})?$", "", template)
+	text = base.replace("_", " ").strip()
+	return text[:1].upper() + text[1:]
+
+
+def call_rules_enabled(party_doctype: str) -> bool:
+	"""Is any after-call rule switched on for this kind of party?"""
+	for r in _rules({AFTER_ANY, AFTER_CONNECTED, AFTER_NOT_CONNECTED}):
+		wanted = PARTY_FILTER.get(r.parties)
+		if not wanted or wanted == party_doctype:
+			return True
+	return False
 
 
 def public_url(file_url: str) -> str:
