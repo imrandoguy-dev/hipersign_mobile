@@ -137,6 +137,8 @@ class TestCalendar(Base):
 
 	def test_display_states(self):
 		frappe.set_user("Administrator")
+		# Leftovers from earlier runs (persisted test DB) must not crowd these out of the day view.
+		frappe.db.delete("CRM Task", {"assigned_to": self.s1, "due_date": ["between", [future(-3), future(3)]]})
 		active = make_task(self.s1, future(1), title="Active one", ref=("Customer", self.cust))
 		overdue = make_task(self.s1, future(-2), title="Overdue one", ref=("Customer", self.cust))
 		done = make_task(self.s1, future(1, hour=12), title="Done one", ref=("Customer", self.cust))
@@ -525,6 +527,10 @@ class TestNotifications(Base):
 		# scheduled_for is "now" (5 min < 15 min lead); make it old enough for the scheduler.
 		frappe.db.set_value(
 			"Mobile Notification", name, "creation", timeutil.now_system() - dt.timedelta(minutes=1)
+		)
+		# Older queued notifications left by earlier runs must not use up this batch.
+		frappe.db.sql(
+			"update `tabMobile Notification` set status='Cancelled' where status='Queued' and name != %s", name
 		)
 		fake = FakeFCM(fcm.SendResult(ok=True, message_id="projects/x/messages/1"))
 		with patch.object(fcm, "send", fake):
