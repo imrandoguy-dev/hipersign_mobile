@@ -74,7 +74,8 @@ def on_task_changed(doc, before, *, status_changed, schedule_changed, assignee_c
 
 
 def schedule_reminder(doc):
-	"""(Re)create the single pending reminder for an open, scheduled task."""
+	"""(Re)create the pending reminders for an open, scheduled task: one N minutes before
+	(Settings / user preference, default 15) and one again at the exact start time."""
 	if doc.status not in OPEN or not doc.get("assigned_to") or not doc.get("due_date"):
 		queue.cancel_for_reference("CRM Task", doc.name, "Reminder")
 		return
@@ -84,20 +85,26 @@ def schedule_reminder(doc):
 		queue.cancel_for_reference("CRM Task", doc.name, "Reminder")
 		return
 	minutes = queue.get_preferences(doc.assigned_to).reminder_minutes
-	at = max(due - dt.timedelta(minutes=minutes), now)
-	key = f"remind:{doc.name}:{doc.assigned_to}:{due.isoformat()}:{minutes}"
-	queue.cancel_for_reference("CRM Task", doc.name, "Reminder", keep_key=key)
-	label = f"in {minutes} min" if minutes and at > now else "soon"
-	queue.enqueue(
-		doc.assigned_to,
-		"Reminder",
-		f"Upcoming {_kind(doc)} {label}",
-		f"Starts at {_when(due)}. Tap to open.",
-		dedup_key=key,
-		reference_doctype="CRM Task",
-		reference_name=doc.name,
-		scheduled_for=at,
-	)
+	before = due - dt.timedelta(minutes=minutes)
+	base = f"remind:{doc.name}:{doc.assigned_to}:{due.isoformat()}"
+	plan = []  # (key, title, at)
+	if minutes and before > now:
+		plan.append((f"{base}:{minutes}", f"Upcoming {_kind(doc)} in {minutes} min", before))
+	elif minutes:
+		plan.append((f"{base}:{minutes}", f"Upcoming {_kind(doc)} soon", now))
+	plan.append((f"{base}:0", f"{_kind(doc).capitalize()} now", due))
+	queue.cancel_for_reference("CRM Task", doc.name, "Reminder", keep_keys=[k for k, _t, _a in plan])
+	for key, title, at in plan:
+		queue.enqueue(
+			doc.assigned_to,
+			"Reminder",
+			title,
+			f"Starts at {_when(due)}. Tap to open.",
+			dedup_key=key,
+			reference_doctype="CRM Task",
+			reference_name=doc.name,
+			scheduled_for=at,
+		)
 
 
 def on_trial_event(booking, event: str, recipients: list[str]):

@@ -139,3 +139,31 @@ class TestActivityEditing(TestCase):
 		frappe.db.set_value("CRM Task", task, "status", "Done")
 		r = call(activities.update_activity, self.sales, activity_id=task, title="Late edit")
 		self.assertFalse(r["success"])
+
+
+class TestActivityDelete(TestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.sales = make_user("sales1")
+		cls.other = make_user("sales2")
+		cls.customer = make_customer("HM Delete Activity Customer")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_delete_own_activity(self):
+		task = make_task(self.sales, future(days=2, hour=9), title="Wrong follow-up", ref=("Customer", self.customer)).name
+		self.assertTrue(frappe.db.exists("Mobile Notification", {"reference_name": str(task), "status": "Queued"}))
+		r = call(activities.delete_activity, self.sales, activity_id=task, reason="Duplicate")
+		self.assertTrue(r["success"], r)
+		self.assertFalse(frappe.db.exists("CRM Task", task))
+		self.assertFalse(frappe.db.exists("Sales Activity History", {"crm_task": task}))
+		self.assertFalse(frappe.db.exists("Mobile Notification", {"reference_name": str(task), "status": "Queued"}))
+		self.assertTrue(frappe.db.exists("Comment", {"reference_name": self.customer, "content": ["like", "%Wrong follow-up%Duplicate%"]}))
+
+	def test_cannot_delete_someone_elses(self):
+		task = make_task(self.sales, future(days=2, hour=9), ref=("Customer", self.customer)).name
+		r = call(activities.delete_activity, self.other, activity_id=task)
+		self.assertFalse(r["success"])
+		self.assertTrue(frappe.db.exists("CRM Task", task))

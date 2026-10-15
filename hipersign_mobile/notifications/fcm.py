@@ -120,7 +120,12 @@ def build_message(token: str, title: str, body: str, data: dict | None) -> dict:
 			"data": {k: str(v) for k, v in (data or {}).items() if v is not None},
 			"android": {
 				"priority": "HIGH",
-				"notification": {"channel_id": ANDROID_CHANNEL_ID, "default_sound": True},
+				"notification": {
+					"channel_id": ANDROID_CHANNEL_ID,
+					"default_sound": True,
+					"default_vibrate_timings": True,
+					"notification_priority": "PRIORITY_MAX",
+				},
 			},
 			"apns": {
 				"headers": {"apns-priority": "10", "apns-push-type": "alert"},

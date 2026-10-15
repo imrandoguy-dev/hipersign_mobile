@@ -99,7 +99,11 @@ def enqueue(
 
 
 def cancel_for_reference(
-	reference_doctype: str, reference_name, event_type: str | None = None, keep_key: str | None = None
+	reference_doctype: str,
+	reference_name,
+	event_type: str | None = None,
+	keep_key: str | None = None,
+	keep_keys: list[str] | None = None,
 ):
 	filters = {
 		"reference_doctype": reference_doctype,
@@ -108,8 +112,9 @@ def cancel_for_reference(
 	}
 	if event_type:
 		filters["event_type"] = event_type
-	if keep_key:
-		filters["deduplication_key"] = ["!=", keep_key]
+	keep = [k for k in [keep_key, *(keep_keys or [])] if k]
+	if keep:
+		filters["deduplication_key"] = ["not in", keep]
 	for name in frappe.get_all("Mobile Notification", filters=filters, pluck="name"):
 		frappe.db.set_value("Mobile Notification", name, "status", "Cancelled", update_modified=False)
 

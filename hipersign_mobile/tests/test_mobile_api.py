@@ -492,8 +492,11 @@ class TestNotifications(Base):
 			filters={"reference_name": str(t.name), "event_type": "Reminder", "status": "Queued"},
 			fields=["scheduled_for"],
 		)
-		self.assertEqual(len(q), 1)
-		self.assertEqual(frappe.utils.get_datetime(q[0].scheduled_for), due - dt.timedelta(minutes=15))
+		# one 15 minutes before, one again at the start time
+		self.assertEqual(
+			sorted(frappe.utils.get_datetime(x.scheduled_for) for x in q),
+			[due - dt.timedelta(minutes=15), due],
+		)
 		call(
 			activities.reschedule_activity,
 			self.s1,
@@ -505,10 +508,11 @@ class TestNotifications(Base):
 			filters={"reference_name": str(t.name), "event_type": "Reminder"},
 			fields=["status", "scheduled_for"],
 		)
-		self.assertEqual(sorted(x.status for x in q), ["Cancelled", "Queued"])
-		live = next(x for x in q if x.status == "Queued")
+		self.assertEqual(sorted(x.status for x in q), ["Cancelled", "Cancelled", "Queued", "Queued"])
+		new = future(4, hour=11)
 		self.assertEqual(
-			frappe.utils.get_datetime(live.scheduled_for), future(4, hour=11) - dt.timedelta(minutes=15)
+			sorted(frappe.utils.get_datetime(x.scheduled_for) for x in q if x.status == "Queued"),
+			[new - dt.timedelta(minutes=15), new],
 		)
 		call(activities.update_status, self.s1, activity_id=t.name, status="Completed")
 		self.assertFalse(
@@ -521,9 +525,12 @@ class TestNotifications(Base):
 	def test_due_reminder_is_delivered_by_scheduler(self):
 		self._register(self.s1, f"dev-rem-{self.uid}", "tok-rem")
 		t = make_task(self.s1, timeutil.now_system() + dt.timedelta(minutes=5), ref=("Customer", self.cust))
-		name = frappe.db.get_value(
-			"Mobile Notification", {"reference_name": str(t.name), "event_type": "Reminder"}, "name"
-		)
+		name = frappe.get_all(
+			"Mobile Notification",
+			filters={"reference_name": str(t.name), "event_type": "Reminder"},
+			pluck="name",
+			order_by="scheduled_for asc",
+		)[0]
 		# scheduled_for is "now" (5 min < 15 min lead); make it old enough for the scheduler.
 		frappe.db.set_value(
 			"Mobile Notification", name, "creation", timeutil.now_system() - dt.timedelta(minutes=1)

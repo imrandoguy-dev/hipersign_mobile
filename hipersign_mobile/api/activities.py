@@ -195,6 +195,39 @@ def update_activity(
 
 
 @mobile_api(methods=("POST",))
+def delete_activity(activity_id: str | int, reason: str | None = None):
+	"""Delete an unwanted follow-up / meeting. Your own (assigned to you or created by you);
+	managers can delete their team's. Trials are cancelled from the trial booking instead."""
+	me = frappe.session.user
+	task = perms.get_task_for(activity_id, me)
+	caps = perms.capabilities(me)
+	if task.get("hm_trial_booking"):
+		raise frappe.ValidationError("This is a trial booking. Cancel the trial instead.")
+	if me not in (task.assigned_to, task.owner) and "team_view" not in caps:
+		raise frappe.PermissionError("You can only delete your own activities.")
+	when = frappe.utils.format_datetime(task.due_date, "d MMM yyyy, h:mm a") if task.due_date else "no date"
+	kind = (task.get("hm_activity_type") or "Follow-up").lower()
+	ref_dt, ref_name, title, name = task.reference_doctype, task.reference_docname, task.title, task.name
+	frappe.db.delete("Sales Activity History", {"crm_task": name})
+	frappe.delete_doc("CRM Task", name, ignore_permissions=True, force=True)
+	# Leave a trace on the customer / lead / deal timeline.
+	if ref_dt and ref_name and frappe.db.exists(ref_dt, ref_name):
+		why = optional_str(reason, 500)
+		frappe.get_doc(
+			{
+				"doctype": "Comment",
+				"comment_type": "Info",
+				"reference_doctype": ref_dt,
+				"reference_name": ref_name,
+				"content": frappe.utils.escape_html(
+					f'Deleted {kind} "{title}" ({when}) from Hipersign' + (f": {why}" if why else "")
+				),
+			}
+		).insert(ignore_permissions=True)
+	return {"deleted": str(name)}
+
+
+@mobile_api(methods=("POST",))
 def reschedule_activity(
 	activity_id: str | int,
 	new_start_datetime: str | None = None,
