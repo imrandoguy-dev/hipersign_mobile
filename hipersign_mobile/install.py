@@ -188,6 +188,9 @@ def setup():
 	add_whatsapp_template_field()
 	add_shift_break_fields()
 	backfill_trial_periods()
+	from hipersign_mobile import desk_setup
+
+	desk_setup.setup()  # "Hipersign Mobile" workspace on the computer
 	backfill_lead_addresses()
 	apply_new_setting_defaults()
 	frappe.clear_cache(doctype="CRM Task")
