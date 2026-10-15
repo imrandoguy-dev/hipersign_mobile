@@ -11,6 +11,8 @@ except ImportError:  # Frappe v15
 
 from hipersign_mobile.api import trials
 from hipersign_mobile.services import trainer_hours
+from unittest.mock import patch
+
 from hipersign_mobile.tests.utils import call, make_customer, make_task, make_user
 
 
@@ -59,9 +61,8 @@ class TestTrainerWorkingHours(TestCase):
 		day = _next_weekday()
 		items = self._day_slots(day, self.trainer)
 		starts = [i["start"][11:16] for i in items]
-		self.assertEqual(starts[0], "09:30")
-		self.assertEqual(starts[-1], "16:30")  # last full hour before 18:00
-		self.assertEqual(len(items), 8)
+		# 09:30-18:00, hourly, but never during the 13:00-14:00 lunch break
+		self.assertEqual(starts, ["09:30", "10:30", "11:30", "14:30", "15:30", "16:30"])
 		self.assertTrue(all(i["id"].startswith("auto:") for i in items))
 
 	def test_assigned_activity_makes_trainer_busy(self):
@@ -69,9 +70,7 @@ class TestTrainerWorkingHours(TestCase):
 		make_task(self.trainer, dt.datetime.combine(day, dt.time(11, 0)), ref=("Customer", self.customer),
 				  hm_end_datetime=dt.datetime.combine(day, dt.time(12, 0)))
 		starts = [i["start"][11:16] for i in self._day_slots(day, self.trainer)]
-		self.assertNotIn("10:30", starts)  # 10:30-11:30 overlaps 11:00-12:00
-		self.assertNotIn("11:30", starts)
-		self.assertIn("09:30", starts)
+		self.assertEqual(starts, ["09:30", "14:30", "15:30", "16:30"])  # 11-12 busy + lunch
 
 	def test_book_free_time_then_it_is_taken(self):
 		day = _next_weekday(2)
@@ -99,3 +98,40 @@ class TestTrainerWorkingHours(TestCase):
 		bad = trainer_hours.slot_id(self.trainer, dt.datetime.combine(day, dt.time(20, 0)), 60)
 		r = call(trials.book_trial, self.sales, trainer_slot=bad, customer=self.customer, booking_type="ERP Trial")
 		self.assertFalse(r["success"])
+
+	def _employee(self, user, holiday_list=None):
+		company = frappe.db.get_value("Company", {}, "name") or "HM Test Co"  # test site has no setup
+		if not frappe.db.exists("Gender", "Female"):
+			frappe.get_doc({"doctype": "Gender", "gender": "Female"}).insert(ignore_permissions=True)
+		name = frappe.db.get_value("Employee", {"user_id": user})
+		if not name:
+			emp = frappe.get_doc({
+				"doctype": "Employee", "first_name": "HM Trainer", "gender": "Female",
+				"date_of_birth": "1995-01-01", "date_of_joining": "2024-01-01", "company": company, "status": "Active",
+				"user_id": user,
+			})
+			emp.name = f"HM-EMP-{user.split('@')[0]}"
+			emp.db_insert()  # the test site has no company set up: store the row as-is
+			name = emp.name
+		frappe.db.set_value("Employee", name, "holiday_list", holiday_list)
+		return name
+
+	def test_shift_hours_and_its_own_lunch_break(self):
+		self._employee(self.trainer)
+		day = _next_weekday(4)
+		with patch.object(trainer_hours, "shift_for", return_value="Shift 9:00-5:00"), patch.object(
+			trainer_hours, "_shift_hours", return_value=(dt.time(9, 0), dt.time(17, 0), (dt.time(12, 30), dt.time(13, 0)))
+		):
+			starts = [i["start"][11:16] for i in self._day_slots(day, self.trainer)]
+		# 9:00-17:00 shift, its own 12:30-13:00 break
+		self.assertEqual(starts, ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"])
+
+	def test_holiday_is_a_day_off(self):
+		day = _next_weekday(5)
+		hl = frappe.get_doc({
+			"doctype": "Holiday List", "holiday_list_name": f"HM HL {day}", "from_date": day - dt.timedelta(days=30),
+			"to_date": day + dt.timedelta(days=30), "holidays": [{"holiday_date": day, "description": "Festival"}],
+		}).insert(ignore_permissions=True)
+		self._employee(self.trainer2, hl.name)
+		self.assertEqual(self._day_slots(day, self.trainer2), [])
+		self.assertTrue(self._day_slots(day + dt.timedelta(days=1), self.trainer2))

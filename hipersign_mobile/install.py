@@ -186,6 +186,7 @@ def setup():
 	create_custom_fields(CRM_LEAD_FIELDS, update=True)
 	add_indexes()
 	add_whatsapp_template_field()
+	add_shift_break_fields()
 	backfill_lead_addresses()
 	apply_new_setting_defaults()
 	frappe.clear_cache(doctype="CRM Task")
@@ -206,6 +207,8 @@ NEW_SETTING_DEFAULTS = {
 	"trainer_day_start": "09:30:00",
 	"trainer_day_end": "18:00:00",
 	"trial_slot_minutes": "60",
+	"lunch_break_start": "13:00:00",
+	"lunch_break_end": "14:00:00",
 }
 
 
@@ -240,6 +243,32 @@ def backfill_lead_addresses():
 		text = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
 		if text and not text.startswith("Open in Google Maps"):
 			frappe.db.set_value("CRM Lead", r.reference_name, "hm_address", text[:500], update_modified=False)
+
+
+def add_shift_break_fields():
+	"""Lunch break per shift (HRMS Shift Type) - only when HRMS is installed."""
+	if not frappe.db.exists("DocType", "Shift Type"):
+		return
+	create_custom_fields(
+		{
+			"Shift Type": [
+				{
+					"fieldname": "hm_break_start",
+					"fieldtype": "Time",
+					"label": "Lunch Break From",
+					"insert_after": "end_time",
+					"description": "Hipersign: trainers on this shift are not offered for trials during the break. Empty = the break in Hipersign Mobile Settings.",
+				},
+				{
+					"fieldname": "hm_break_end",
+					"fieldtype": "Time",
+					"label": "Lunch Break To",
+					"insert_after": "hm_break_start",
+				},
+			]
+		},
+		update=True,
+	)
 
 
 def add_whatsapp_template_field():
@@ -325,3 +354,7 @@ def before_uninstall():
 	)
 	if name:
 		frappe.delete_doc("Custom Field", name, ignore_permissions=True)
+	for fieldname in ("hm_break_start", "hm_break_end"):
+		name = frappe.db.get_value("Custom Field", {"dt": "Shift Type", "fieldname": fieldname})
+		if name:
+			frappe.delete_doc("Custom Field", name, ignore_permissions=True)

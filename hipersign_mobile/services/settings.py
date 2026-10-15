@@ -23,6 +23,8 @@ DEFAULTS = {
 	"trainer_day_start": "09:30:00",
 	"trainer_day_end": "18:00:00",
 	"trial_slot_minutes": 60,
+	"lunch_break_start": "13:00:00",
+	"lunch_break_end": "14:00:00",
 }
 
 

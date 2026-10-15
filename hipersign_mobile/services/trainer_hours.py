@@ -1,7 +1,11 @@
-"""Trainer availability from working hours (no hand-made Trainer Slots needed).
+"""Trainer availability from each trainer's shift (no hand-made Trainer Slots needed).
 
-A trainer is free at a time inside working hours unless she already has an active trial
-booking or an open follow-up / meeting assigned to her that overlaps it. These "automatic"
+Working hours per day come from the trainer's Employee record: the active Shift Assignment
+for that date, else the Employee's Default Shift, else the hours in Hipersign Mobile Settings.
+Days off: the Employee's (or company's) Holiday List, else the working days in Settings, plus
+approved Leave Applications. The lunch break (Shift Type's own, else Settings) is never offered.
+Within those hours she is free unless she already has an active trial booking or an open
+follow-up / meeting assigned to her that overlaps. These "automatic"
 times have ids like ``auto:<trainer>:<YYYYMMDDHHMM>:<minutes>``; when one is booked, a real
 Trainer Slot is created for it under the trainer lock, so the rest of booking works as before.
 """
@@ -11,7 +15,7 @@ from __future__ import annotations
 import datetime as dt
 
 import frappe
-from frappe.utils import get_datetime, get_time
+from frappe.utils import get_datetime, get_time, getdate
 
 from hipersign_mobile.services import permissions as perms
 from hipersign_mobile.services import settings as hm_settings
@@ -32,7 +36,136 @@ def config() -> frappe._dict:
 		start=get_time(s.trainer_day_start or "09:30:00"),
 		end=get_time(s.trainer_day_end or "18:00:00"),
 		minutes=max(15, min(int(s.trial_slot_minutes or 60), 480)),
+		lunch=_break(s.get("lunch_break_start"), s.get("lunch_break_end")),
 	)
+
+
+def _break(start, end):
+	if not start or not end:
+		return None
+	a, b = get_time(start), get_time(end)
+	return (a, b) if b > a else None
+
+
+# ---------------------------------------------------------------- shifts (HRMS)
+
+
+def _has(doctype: str) -> bool:
+	return bool(frappe.db.exists("DocType", doctype))
+
+
+def employee_for(user: str):
+	meta = frappe.get_meta("Employee")
+	fields = ["name", "company"] + [f for f in ("default_shift", "holiday_list") if meta.has_field(f)]
+	emp = frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, fields, as_dict=True)
+	if emp:
+		emp.setdefault("default_shift", None)
+		emp.setdefault("holiday_list", None)
+	return emp
+
+
+def shift_for(employee, day: dt.date) -> str | None:
+	"""Shift Type name for this employee on this date (active assignment, else default shift)."""
+	if not employee or not _has("Shift Assignment"):
+		return employee.default_shift if employee else None
+	rows = frappe.db.sql(
+		"""select shift_type from `tabShift Assignment`
+		where employee = %s and docstatus = 1 and status = 'Active'
+		and start_date <= %s and (end_date is null or end_date >= %s)
+		order by start_date desc, creation desc limit 1""",
+		(employee.name, day, day),
+	)
+	return rows[0][0] if rows else employee.default_shift
+
+
+def _shift_hours(shift: str):
+	"""(start, end, lunch) of a Shift Type; lunch may be None."""
+	if not shift or not _has("Shift Type"):
+		return None
+	meta = frappe.get_meta("Shift Type")
+	fields = ["start_time", "end_time"] + [f for f in ("hm_break_start", "hm_break_end") if meta.has_field(f)]
+	row = frappe.db.get_value("Shift Type", shift, fields, as_dict=True)
+	if not row or not row.start_time or not row.end_time:
+		return None
+	return (
+		get_time(row.start_time),
+		get_time(row.end_time),
+		_break(row.get("hm_break_start"), row.get("hm_break_end")),
+	)
+
+
+def holiday_list_for(employee) -> str | None:
+	if not employee:
+		return None
+	return employee.holiday_list or (
+		frappe.get_cached_value("Company", employee.company, "default_holiday_list")
+		if employee.company
+		else None
+	)
+
+
+def _holidays(holiday_list: str | None, start: dt.date, end: dt.date) -> set:
+	if not holiday_list:
+		return set()
+	return set(
+		frappe.get_all(
+			"Holiday",
+			filters={"parent": holiday_list, "holiday_date": ["between", [start, end]]},
+			pluck="holiday_date",
+		)
+	)
+
+
+def _leave_days(employee, start: dt.date, end: dt.date) -> set:
+	if not employee or not _has("Leave Application"):
+		return set()
+	out = set()
+	for la in frappe.get_all(
+		"Leave Application",
+		filters={
+			"employee": employee.name,
+			"status": "Approved",
+			"docstatus": 1,
+			"from_date": ["<=", end],
+			"to_date": [">=", start],
+		},
+		fields=["from_date", "to_date"],
+	):
+		d = max(getdate(la.from_date), start)
+		while d <= min(getdate(la.to_date), end):
+			out.add(d)
+			d += dt.timedelta(days=1)
+	return out
+
+
+def working_windows(trainer: str, start: dt.date, end: dt.date, cfg=None) -> dict:
+	"""{date: (window_start, window_end, lunch_or_None)} for the days the trainer works."""
+	cfg = cfg or config()
+	emp = employee_for(trainer) if _has("Employee") else None
+	hl = holiday_list_for(emp)
+	off = _holidays(hl, start, end) | _leave_days(emp, start, end)
+	out = {}
+	day = start
+	while day <= end:
+		if day not in off and (hl or day.weekday() in cfg.days):
+			hours = _shift_hours(shift_for(emp, day)) if emp else None
+			if hours:
+				s_time, e_time, lunch = hours
+				lunch = lunch or cfg.lunch
+			else:
+				s_time, e_time, lunch = cfg.start, cfg.end, cfg.lunch
+			w_start = dt.datetime.combine(day, s_time)
+			w_end = dt.datetime.combine(day, e_time)
+			if w_end <= w_start:
+				w_end += dt.timedelta(days=1)  # night shift ends the next day
+			lunch_range = None
+			if lunch:
+				ls, le = dt.datetime.combine(day, lunch[0]), dt.datetime.combine(day, lunch[1])
+				if ls < w_end and le > w_start:
+					lunch_range = (ls, le)
+			out[day] = (w_start, w_end, lunch_range)
+		day += dt.timedelta(days=1)
+	return out
 
 
 def trainers() -> list[str]:
@@ -119,35 +252,29 @@ def free_times(
 	start = max(start, now)
 	if end <= start:
 		return []
-	names = [trainer] if trainer else trainers()
-	if trainer and trainer not in trainers():
+	all_trainers = trainers()
+	if trainer and trainer not in all_trainers:
 		return []
+	names = [trainer] if trainer else all_trainers
 	step = dt.timedelta(minutes=cfg.minutes)
 	out = []
 	for t in names:
-		taken = busy(t, start, end)
-		day = start.date()
-		while day <= end.date() and len(out) < limit:
-			if day.weekday() in cfg.days:
-				cur = dt.datetime.combine(day, cfg.start)
-				day_end = dt.datetime.combine(day, cfg.end)
-				while cur + step <= day_end:
-					if (
-						cur >= start
-						and cur + step <= end
-						and cur > now
-						and not _overlaps(cur, cur + step, taken)
-					):
-						out.append(
-							{
-								"trainer": t,
-								"start": cur,
-								"end": cur + step,
-								"id": slot_id(t, cur, cfg.minutes),
-							}
-						)
-					cur += step
-			day += dt.timedelta(days=1)
+		taken = busy(t, start - dt.timedelta(days=1), end)
+		windows = working_windows(t, (start - dt.timedelta(days=1)).date(), end.date(), cfg)
+		for _day, (w_start, w_end, lunch) in sorted(windows.items()):
+			blocked = taken + ([lunch] if lunch else [])
+			cur = w_start
+			while cur + step <= w_end:
+				if (
+					cur >= start
+					and cur + step <= end
+					and cur > now
+					and not _overlaps(cur, cur + step, blocked)
+				):
+					out.append(
+						{"trainer": t, "start": cur, "end": cur + step, "id": slot_id(t, cur, cfg.minutes)}
+					)
+				cur += step
 	out.sort(key=lambda x: (x["start"], x["trainer"]))
 	return out[:limit]
 
@@ -166,13 +293,13 @@ def materialize(value: str) -> str:
 		raise ConflictError("This trainer is no longer available.")
 	if start <= timeutil.now_system():
 		raise ConflictError("This time is in the past.")
-	if (
-		start.weekday() not in cfg.days
-		or start.time() < cfg.start
-		or end > dt.datetime.combine(start.date(), cfg.end)
-		or minutes != cfg.minutes
-	):
-		raise frappe.ValidationError("This time is outside the trainer's working hours.")
+	windows = working_windows(trainer, start.date() - dt.timedelta(days=1), start.date(), cfg)
+	inside = [w for w in windows.values() if w[0] <= start and end <= w[1]]
+	if minutes != cfg.minutes or not inside:
+		raise frappe.ValidationError("This time is outside the trainer's shift.")
+	lunch = inside[0][2]
+	if lunch and _overlaps(start, end, [lunch]):
+		raise frappe.ValidationError("This time is during the trainer's lunch break.")
 	lock_trainer(trainer)
 	if _overlaps(start, end, busy(trainer, start, end)):
 		raise ConflictError("The trainer just got busy at this time. Please pick another time.")

@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-15 07:00:00.000000",
+ "creation": "2026-10-15 07:30:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -42,6 +42,8 @@
   "trainer_day_start",
   "trainer_day_end",
   "trial_slot_minutes",
+  "lunch_break_start",
+  "lunch_break_end",
   "whatsapp_section",
   "enable_whatsapp_rules",
   "whatsapp_rules"
@@ -240,15 +242,15 @@
   },
   {
    "default": "1",
-   "description": "Salespeople can book a trial with any trainer at any free time inside working hours - no need to create Trainer Slots by hand. A trainer is busy when she already has a trial, or an open follow-up / meeting assigned to her at that time. Trainer Slots created by hand still work too.",
+   "description": "Salespeople can book a trial with any trainer at any free time inside her shift - no need to create Trainer Slots by hand. The shift comes from the trainer's Employee record (active Shift Assignment, else Default Shift); holidays and approved leave are days off. She is busy during the lunch break, a trial already booked, or an open follow-up / meeting assigned to her. The hours below are used only for trainers without a shift.",
    "fieldname": "auto_trainer_slots",
    "fieldtype": "Check",
-   "label": "Trainers Are Free During Working Hours"
+   "label": "Trainers Are Free During Their Shift"
   },
   {
    "default": "Mon,Tue,Wed,Thu,Fri,Sat",
    "depends_on": "auto_trainer_slots",
-   "description": "Comma separated: Mon,Tue,Wed,Thu,Fri,Sat,Sun",
+   "description": "Comma separated: Mon,Tue,Wed,Thu,Fri,Sat,Sun. Used when the trainer has no Holiday List.",
    "fieldname": "trainer_working_days",
    "fieldtype": "Data",
    "label": "Working Days"
@@ -262,14 +264,14 @@
    "depends_on": "auto_trainer_slots",
    "fieldname": "trainer_day_start",
    "fieldtype": "Time",
-   "label": "Day Starts At"
+   "label": "Day Starts At (No Shift)"
   },
   {
    "default": "18:00:00",
    "depends_on": "auto_trainer_slots",
    "fieldname": "trainer_day_end",
    "fieldtype": "Time",
-   "label": "Day Ends At"
+   "label": "Day Ends At (No Shift)"
   },
   {
    "default": "60",
@@ -277,6 +279,21 @@
    "fieldname": "trial_slot_minutes",
    "fieldtype": "Int",
    "label": "Trial Length (Minutes)"
+  },
+  {
+   "default": "13:00:00",
+   "depends_on": "auto_trainer_slots",
+   "description": "Nobody is offered for trials during the break. A shift can have its own break (Shift Type > Lunch Break From / To).",
+   "fieldname": "lunch_break_start",
+   "fieldtype": "Time",
+   "label": "Lunch Break From"
+  },
+  {
+   "default": "14:00:00",
+   "depends_on": "auto_trainer_slots",
+   "fieldname": "lunch_break_end",
+   "fieldtype": "Time",
+   "label": "Lunch Break To"
   },
   {
    "fieldname": "whatsapp_section",
@@ -302,7 +319,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-15 07:00:00.000000",
+ "modified": "2026-10-15 07:30:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",
