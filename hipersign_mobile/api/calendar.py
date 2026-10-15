@@ -41,8 +41,14 @@ def get_my_day(start_date: str | None = None, end_date: str | None = None, user:
 	rows = svc.list_activities(me, start=range_start, end=range_end, limit=500, for_user=target)
 	items = [svc.serialize(r, today_start, cc=cc) for r in rows[:500]]
 
+	# Everything still open whose time has passed (earlier days and earlier today), newest first.
 	overdue = svc.list_activities(
-		me, status_bucket="Open", end=today_start, limit=100, for_user=target, order_by="due_date desc"
+		me,
+		status_bucket="Open",
+		end=timeutil.now_system(),
+		limit=200,
+		for_user=target,
+		order_by="due_date desc",
 	)
 	unscheduled_rows = frappe.get_all(
 		"CRM Task",
@@ -60,7 +66,7 @@ def get_my_day(start_date: str | None = None, end_date: str | None = None, user:
 	return {
 		"range": {"start_date": str(start_d), "end_date": str(end_d)},
 		"items": items,
-		"overdue": [svc.serialize(r, today_start, cc=cc) for r in overdue[:100]],
+		"overdue": [svc.serialize(r, today_start, cc=cc) for r in overdue[:200]],
 		"unscheduled": [svc.serialize(r, today_start, cc=cc) for r in unscheduled_rows],
 		"counts": _counts(items),
 		"synced_at": timeutil.to_iso(timeutil.now_system()),
