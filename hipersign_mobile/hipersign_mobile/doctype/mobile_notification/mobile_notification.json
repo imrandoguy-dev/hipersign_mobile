@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 0,
  "autoname": "hash",
- "creation": "2026-10-12 12:00:00.000000",
+ "creation": "2026-10-15 13:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -42,7 +42,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Event Type",
-   "options": "Assignment\nReminder\nRescheduled\nTrial Update\nTest",
+   "options": "Assignment\nReminder\nRescheduled\nTrial Update\nWhatsApp\nTest",
    "reqd": 1
   },
   {
@@ -145,7 +145,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-12 12:00:00.000000",
+ "modified": "2026-10-15 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Mobile Notification",

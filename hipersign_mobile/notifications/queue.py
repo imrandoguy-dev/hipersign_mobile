@@ -22,6 +22,7 @@ PREF_FIELD = {
 	"Rescheduled": "notify_assignments",
 	"Reminder": "notify_reminders",
 	"Trial Update": "notify_trials",
+	"WhatsApp": "notify_whatsapp",
 }
 
 
@@ -59,7 +60,7 @@ def get_preferences(user: str) -> frappe._dict:
 	s = hm_settings.get()
 	fields = ["reminder_minutes", "notify_assignments", "notify_reminders", "notify_trials"]
 	meta = frappe.get_meta("Mobile User Preference")
-	fields += [f for f in ("reminder_offsets", "alarm_high_priority") if meta.has_field(f)]
+	fields += [f for f in ("reminder_offsets", "alarm_high_priority", "notify_whatsapp") if meta.has_field(f)]
 	row = frappe.db.get_value("Mobile User Preference", user, fields, as_dict=True)
 	if not row:
 		row = frappe._dict(
@@ -68,6 +69,7 @@ def get_preferences(user: str) -> frappe._dict:
 			notify_reminders=1,
 			notify_trials=1,
 			alarm_high_priority=1,
+			notify_whatsapp=1,
 		)
 	row.reminder_minutes = (
 		cint(row.reminder_minutes) if row.reminder_minutes is not None else s.default_reminder_minutes
@@ -79,6 +81,7 @@ def get_preferences(user: str) -> frappe._dict:
 	# Default: N minutes before (old single setting) and again at the start time.
 	row.reminder_offsets = offsets or sorted({row.reminder_minutes, 0}, reverse=True)
 	row.alarm_high_priority = 1 if row.get("alarm_high_priority") is None else cint(row.alarm_high_priority)
+	row.notify_whatsapp = 1 if row.get("notify_whatsapp") is None else cint(row.notify_whatsapp)
 	return row
 
 
@@ -280,6 +283,8 @@ def route_for(doctype, name) -> str | None:
 		return f"/activity/{name}"
 	if doctype == "Trial Booking" and name:
 		return f"/trial/{name}"
+	if doctype == "Hipersign WhatsApp Chat" and name:
+		return f"/whatsapp/{name}"
 	return None
 
 

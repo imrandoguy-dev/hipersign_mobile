@@ -1,0 +1,158 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:phone",
+ "creation": "2026-10-15 13:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "phone",
+  "title",
+  "profile_name",
+  "party_doctype",
+  "party",
+  "owner_user",
+  "column_break_1",
+  "last_message",
+  "last_message_at",
+  "last_direction",
+  "last_incoming_at",
+  "unread_count",
+  "whatsapp_account"
+ ],
+ "fields": [
+  {
+   "description": "International number, digits only (e.g. 918078368600).",
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "WhatsApp Number",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name"
+  },
+  {
+   "fieldname": "profile_name",
+   "fieldtype": "Data",
+   "label": "WhatsApp Profile Name"
+  },
+  {
+   "fieldname": "party_doctype",
+   "fieldtype": "Link",
+   "label": "Party Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "label": "Customer / Lead / Deal",
+   "options": "party_doctype",
+   "search_index": 1
+  },
+  {
+   "description": "Salesperson who owns the customer / lead / deal (gets the notifications).",
+   "fieldname": "owner_user",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owner",
+   "options": "User"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_message",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Last Message"
+  },
+  {
+   "fieldname": "last_message_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Message At",
+   "search_index": 1
+  },
+  {
+   "fieldname": "last_direction",
+   "fieldtype": "Select",
+   "label": "Last Direction",
+   "options": "Incoming\nOutgoing"
+  },
+  {
+   "description": "Free text replies are possible for 24 hours after this; later only approved templates.",
+   "fieldname": "last_incoming_at",
+   "fieldtype": "Datetime",
+   "label": "Customer Last Wrote At"
+  },
+  {
+   "default": "0",
+   "fieldname": "unread_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Unread"
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Data",
+   "label": "WhatsApp Account"
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-15 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Hipersign WhatsApp Chat",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 0,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "sort_field": "last_message_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title"
+}

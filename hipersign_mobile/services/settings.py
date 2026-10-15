@@ -25,6 +25,8 @@ DEFAULTS = {
 	"trial_slot_minutes": 60,
 	"lunch_break_start": "13:00:00",
 	"lunch_break_end": "14:00:00",
+	"enable_whatsapp_chat": 1,
+	"whatsapp_max_media_mb": 16,
 }
 
 
@@ -47,6 +49,7 @@ def get() -> frappe._dict:
 		"notification_retention_days",
 		"max_recording_mb",
 		"trial_slot_minutes",
+		"whatsapp_max_media_mb",
 	):
 		out[key] = cint(out[key]) or DEFAULTS[key]
 	out.enable_push = cint(out.enable_push)
@@ -54,6 +57,7 @@ def get() -> frappe._dict:
 	out.enable_google_lookup = cint(out.enable_google_lookup)
 	out.push_show_details = cint(out.push_show_details)
 	out.auto_trainer_slots = cint(out.auto_trainer_slots)
+	out.enable_whatsapp_chat = cint(out.enable_whatsapp_chat)
 	out.restrict_task_visibility = cint(out.restrict_task_visibility)
 	out.default_country_code = "".join(ch for ch in str(out.default_country_code) if ch.isdigit()) or "91"
 	return out

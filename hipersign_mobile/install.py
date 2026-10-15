@@ -193,6 +193,9 @@ def setup():
 	desk_setup.setup()  # "Hipersign Mobile" workspace on the computer
 	backfill_lead_addresses()
 	apply_new_setting_defaults()
+	from hipersign_mobile.services import whatsapp_chat
+
+	whatsapp_chat.backfill_chats()  # chat list for messages received before this version
 	frappe.clear_cache(doctype="CRM Task")
 	# install-app marks patches as done without running them, so backfill here too (idempotent).
 	from hipersign_mobile.patches.v0_1.set_activity_type_for_existing_tasks import execute as backfill_types
@@ -213,6 +216,8 @@ NEW_SETTING_DEFAULTS = {
 	"trial_slot_minutes": "60",
 	"lunch_break_start": "13:00:00",
 	"lunch_break_end": "14:00:00",
+	"enable_whatsapp_chat": "1",
+	"whatsapp_max_media_mb": "16",
 }
 
 

@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 0,
  "autoname": "field:user",
- "creation": "2026-10-15 06:45:00.000000",
+ "creation": "2026-10-15 13:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -13,7 +13,8 @@
   "column_break_1",
   "notify_assignments",
   "notify_reminders",
-  "notify_trials"
+  "notify_trials",
+  "notify_whatsapp"
  ],
  "fields": [
   {
@@ -66,11 +67,17 @@
    "fieldname": "notify_trials",
    "fieldtype": "Check",
    "label": "Trial Notifications"
+  },
+  {
+   "default": "1",
+   "fieldname": "notify_whatsapp",
+   "fieldtype": "Check",
+   "label": "WhatsApp Message Notifications"
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-15 06:45:00.000000",
+ "modified": "2026-10-15 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Mobile User Preference",

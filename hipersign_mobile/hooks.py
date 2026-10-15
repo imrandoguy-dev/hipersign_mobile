@@ -28,6 +28,10 @@ doc_events = {
 	"CRM Lead": {
 		"after_insert": "hipersign_mobile.services.whatsapp_rules.after_lead_insert",
 	},
+	# Chat list + notifications for WhatsApp chats in the app (only when Frappe WhatsApp is installed).
+	"WhatsApp Message": {
+		"after_insert": "hipersign_mobile.services.whatsapp_chat.on_message_insert",
+	},
 }
 
 # Mobile-only users see only their own CRM Tasks everywhere (Desk, CRM UI, REST).

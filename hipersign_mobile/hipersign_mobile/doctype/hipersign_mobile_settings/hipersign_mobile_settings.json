@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-15 08:45:00.000000",
+ "creation": "2026-10-15 13:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -47,7 +47,11 @@
   "trial_holiday_list",
   "whatsapp_section",
   "enable_whatsapp_rules",
-  "whatsapp_rules"
+  "whatsapp_rules",
+  "whatsapp_chat_section",
+  "enable_whatsapp_chat",
+  "column_break_wa_chat",
+  "whatsapp_max_media_mb"
  ],
  "fields": [
   {
@@ -322,12 +326,36 @@
    "fieldtype": "Table",
    "label": "WhatsApp Rules",
    "options": "Hipersign WhatsApp Rule"
+  },
+  {
+   "fieldname": "whatsapp_chat_section",
+   "fieldtype": "Section Break",
+   "label": "WhatsApp Chats In The App"
+  },
+  {
+   "default": "1",
+   "description": "Salespeople read and answer customers' WhatsApp messages in the app: text replies, approved templates, photos, documents and voice messages. They see the chats of their own customers / leads / deals and of numbers not in ERPNext yet; managers see all chats (with Customer Visibility = All Records everyone sees all). A new message notifies the owner of that customer / lead / deal, or everyone who can see the chat when nobody owns it.",
+   "fieldname": "enable_whatsapp_chat",
+   "fieldtype": "Check",
+   "label": "Show WhatsApp Chats In The App"
+  },
+  {
+   "fieldname": "column_break_wa_chat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "16",
+   "depends_on": "enable_whatsapp_chat",
+   "description": "WhatsApp limits: photos 5 MB, voice / video 16 MB, documents 100 MB.",
+   "fieldname": "whatsapp_max_media_mb",
+   "fieldtype": "Int",
+   "label": "Max Photo / File Size (MB)"
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-15 08:45:00.000000",
+ "modified": "2026-10-15 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",

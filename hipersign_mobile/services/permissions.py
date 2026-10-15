@@ -29,7 +29,7 @@ SALES_CAPS = {
 MANAGER_CAPS = SALES_CAPS | {"team_view", "assign_others", "manage_trainer_slots"}
 TRAINER_CAPS = {"manage_trainer_slots"}
 
-ALL_CAPS = sorted(MANAGER_CAPS | TRAINER_CAPS)
+ALL_CAPS = sorted(MANAGER_CAPS | TRAINER_CAPS | {"whatsapp"})
 
 
 def user_roles(user: str | None = None) -> set[str]:
@@ -47,7 +47,13 @@ def capabilities(user: str | None = None) -> set[str]:
 		caps |= TRAINER_CAPS
 	if "call_recordings" in caps and not hm_settings.get().enable_call_recordings:
 		caps.discard("call_recordings")
+	if "customers" in caps and whatsapp_chat_on():
+		caps.add("whatsapp")  # WhatsApp chats with customers (needs the Frappe WhatsApp app)
 	return caps
+
+
+def whatsapp_chat_on() -> bool:
+	return bool(hm_settings.get().enable_whatsapp_chat) and "frappe_whatsapp" in frappe.get_installed_apps()
 
 
 def workspaces(caps: set[str]) -> list[str]:
