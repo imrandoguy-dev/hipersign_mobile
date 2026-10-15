@@ -185,3 +185,130 @@ def whatsapp_status(doctype: str | None = None, name: str | None = None, since: 
 		"enabled": whatsapp_rules.call_rules_enabled(doctype),
 		"items": whatsapp_rules.outcomes(doctype, name, when),
 	}
+
+
+KINDS = {"Customer": "Customer", "CRM Lead": "Lead", "CRM Deal": "Deal"}
+CALL_FILTERS = ("all", "connected", "not_connected", "incoming", "missed")
+
+
+@mobile_api(methods=("GET",))
+def list_calls(
+	scope: str | None = None,
+	filter: str | None = None,
+	query: str | None = None,
+	cursor=None,
+	page_size=None,
+):
+	"""Latest work calls, newest first: mine, or the whole team's (managers)."""
+	from hipersign_mobile.api._common import choice, page_args, page_result
+
+	me = frappe.session.user
+	perms.require("customers", me)
+	caps = perms.capabilities(me)
+	scope = choice(scope, ("mine", "team"), "scope", default="mine")
+	if scope == "team" and "team_view" not in caps:
+		raise frappe.PermissionError("Only managers can see the team's calls.")
+	kind = choice(filter, CALL_FILTERS, "filter", default="all")
+	offset, limit = page_args(cursor, page_size)
+
+	filters = []
+	if scope == "mine":
+		filters.append(["caller", "=", me])
+	if kind == "connected":
+		filters.append(["connected", "=", 1])
+	elif kind == "not_connected":
+		filters += [["connected", "=", 0], ["direction", "=", "Outgoing"]]
+	elif kind == "incoming":
+		filters.append(["direction", "=", "Incoming"])
+	elif kind == "missed":
+		filters.append(["direction", "=", "Missed"])
+	or_filters = None
+	q = (query or "").strip()
+	if q:
+		digits = "".join(ch for ch in q if ch.isdigit())
+		or_filters = [["party_name", "like", f"%{q}%"]]
+		if len(digits) >= 3:
+			or_filters.append(["phone", "like", f"%{digits}%"])
+
+	rows = frappe.get_all(
+		"Mobile Call Log",
+		filters=filters,
+		or_filters=or_filters,
+		fields=[
+			"name",
+			"caller",
+			"call_datetime",
+			"direction",
+			"call_type",
+			"connected",
+			"duration_seconds",
+			"phone",
+			"party_doctype",
+			"party",
+			"party_name",
+			"activity",
+			"recording",
+			"source",
+		],
+		order_by="call_datetime desc",
+		start=offset,
+		limit=limit + 1,
+	)
+	recs = {
+		r.name: r.audio_file
+		for r in frappe.get_all(
+			"Call Recording",
+			filters={"name": ["in", [x.recording for x in rows if x.recording] or [""]]},
+			fields=["name", "audio_file"],
+		)
+	}
+	names = {}
+	items = []
+	for r in rows[:limit]:
+		if r.caller not in names:
+			names[r.caller] = frappe.utils.get_fullname(r.caller)
+		audio = recs.get(r.recording)
+		items.append(
+			{
+				"id": r.name,
+				"at": timeutil.to_iso(r.call_datetime),
+				"direction": r.direction,
+				"call_type": r.call_type,
+				"connected": bool(cint(r.connected)),
+				"duration": cint(r.duration_seconds),
+				"phone": r.phone,
+				"party": {
+					"kind": KINDS.get(r.party_doctype, r.party_doctype),
+					"doctype": r.party_doctype,
+					"id": r.party,
+					"name": r.party_name or r.party,
+				}
+				if r.party
+				else None,
+				"caller": r.caller,
+				"caller_name": names[r.caller],
+				"activity_id": str(r.activity) if r.activity else None,
+				"recording": {"id": r.recording, "ext": (audio or "").rsplit(".", 1)[-1].lower() or None}
+				if r.recording and audio
+				else None,
+				"via_app": r.source == "Hipersign",
+			}
+		)
+	result = page_result(items, offset, limit, len(rows) > limit)
+	if not offset:
+		result["today"] = _today(me if scope == "mine" else None)
+	return result
+
+
+def _today(user: str | None) -> dict:
+	start = timeutil.user_today_start(frappe.session.user)
+	cond, args = ("and caller = %(user)s", {"user": user}) if user else ("", {})
+	r = frappe.db.sql(
+		f"""select count(*) total, coalesce(sum(connected), 0) connected,
+		coalesce(sum(call_type = 'New'), 0) new_calls, coalesce(sum(call_type = 'Follow-up'), 0) followups,
+		coalesce(sum(duration_seconds), 0) talk
+		from `tabMobile Call Log` where direction = 'Outgoing' and call_datetime >= %(start)s {cond}""",
+		{"start": start, **args},
+		as_dict=True,
+	)[0]
+	return {k: cint(v) for k, v in r.items()}

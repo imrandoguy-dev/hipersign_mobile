@@ -339,7 +339,9 @@ def messages_for(key: str, before=None, limit: int = 40) -> list:
 	variants = number_variants(key)
 	filters = []
 	if before:
-		filters.append(["creation", "<", get_datetime(before)])
+		from hipersign_mobile.services import timeutil
+
+		filters.append(["creation", "<", timeutil.parse_client_datetime(before)])
 	return frappe.get_all(
 		MESSAGE,
 		filters=filters,

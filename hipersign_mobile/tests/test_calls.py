@@ -117,3 +117,23 @@ class TestCalls(TestCase):
 			self.assertTrue(report.execute({"from_date": today, "to_date": today, "group_by": g})[1])
 		s = call(calls.today_summary, self.caller)
 		self.assertGreaterEqual(s["data"]["total"], 3)
+
+	def test_calls_list(self):
+		self._sync(self.caller, [_call(f"{self.p}l1", 30, 0), _call(f"{self.p}l2", 20, 75)])
+		self._sync(self.other, [_call(f"{self.p}l3", 10, 40)])
+		r = call(calls.list_calls, self.caller)
+		self.assertTrue(r["success"], r)
+		mine = [i for i in r["data"]["items"] if i["phone"] == E164]
+		self.assertEqual([(i["connected"], i["duration"]) for i in mine], [(True, 75), (False, 0)])  # newest first
+		self.assertEqual(mine[0]["party"]["name"], "HM Call Customer")
+		self.assertEqual(mine[0]["party"]["kind"], "Customer")
+		self.assertIn("today", r["data"])
+
+		missed = call(calls.list_calls, self.caller, filter="not_connected")["data"]["items"]
+		self.assertEqual([i["duration"] for i in missed if i["phone"] == E164], [0])
+		self.assertEqual(len(call(calls.list_calls, self.caller, query="HM Call")["data"]["items"]) >= 2, True)
+
+		# a salesperson can't see the team; a manager can
+		self.assertFalse(call(calls.list_calls, self.caller, scope="team")["success"])
+		team = call(calls.list_calls, self.manager, scope="team")["data"]["items"]
+		self.assertEqual({i["caller"] for i in team if i["phone"] == E164}, {self.caller, self.other})
