@@ -25,24 +25,60 @@ PREF_FIELD = {
 }
 
 
+MAX_OFFSETS = 5
+MAX_OFFSET_MINUTES = 7 * 1440
+
+
+def parse_offsets(value) -> list[int] | None:
+	""" "15, 0" / [15, 0] -> [15, 0] (sorted, largest first). None/"" -> None. Raises on bad input."""
+	if value is None:
+		return None
+	if isinstance(value, str):
+		value = value.strip()
+		if not value:
+			return None
+		parts = [p for p in value.replace(";", ",").split(",") if p.strip()]
+	else:
+		parts = list(value)
+	try:
+		nums = sorted({int(str(p).strip()) for p in parts}, reverse=True)
+	except ValueError:
+		raise frappe.ValidationError("Reminders must be minutes, e.g. 15,0.")
+	if not nums:
+		return None
+	if len(nums) > MAX_OFFSETS or any(n < 0 or n > MAX_OFFSET_MINUTES for n in nums):
+		raise frappe.ValidationError(f"Choose up to {MAX_OFFSETS} reminders between 0 minutes and 7 days.")
+	return nums
+
+
+def offsets_text(nums: list[int] | None) -> str | None:
+	return ",".join(str(n) for n in nums) if nums else None
+
+
 def get_preferences(user: str) -> frappe._dict:
 	s = hm_settings.get()
-	row = frappe.db.get_value(
-		"Mobile User Preference",
-		user,
-		["reminder_minutes", "notify_assignments", "notify_reminders", "notify_trials"],
-		as_dict=True,
-	)
+	fields = ["reminder_minutes", "notify_assignments", "notify_reminders", "notify_trials"]
+	meta = frappe.get_meta("Mobile User Preference")
+	fields += [f for f in ("reminder_offsets", "alarm_high_priority") if meta.has_field(f)]
+	row = frappe.db.get_value("Mobile User Preference", user, fields, as_dict=True)
 	if not row:
-		return frappe._dict(
+		row = frappe._dict(
 			reminder_minutes=s.default_reminder_minutes,
 			notify_assignments=1,
 			notify_reminders=1,
 			notify_trials=1,
+			alarm_high_priority=1,
 		)
 	row.reminder_minutes = (
 		cint(row.reminder_minutes) if row.reminder_minutes is not None else s.default_reminder_minutes
 	)
+	try:
+		offsets = parse_offsets(row.get("reminder_offsets"))
+	except frappe.ValidationError:
+		offsets = None
+	# Default: N minutes before (old single setting) and again at the start time.
+	row.reminder_offsets = offsets or sorted({row.reminder_minutes, 0}, reverse=True)
+	row.alarm_high_priority = 1 if row.get("alarm_high_priority") is None else cint(row.alarm_high_priority)
 	return row
 
 
@@ -131,6 +167,15 @@ def _still_relevant(n) -> bool:
 	return True
 
 
+def _rings_like_alarm(n) -> bool:
+	"""Reminders of High priority activities ring like an alarm (unless the person turned it off)."""
+	if n.event_type != "Reminder" or n.reference_doctype != "CRM Task" or not n.reference_name:
+		return False
+	if frappe.db.get_value("CRM Task", n.reference_name, "priority") not in ("High", "Urgent"):
+		return False
+	return bool(cint(get_preferences(n.recipient).alarm_high_priority))
+
+
 def _backoff_minutes(attempt: int) -> int:
 	return min(2 ** max(attempt - 1, 0), 30)  # 1, 2, 4, 8, 16, 30 ...
 
@@ -200,6 +245,8 @@ def deliver(notification: str):
 				title, body = detailed
 		except Exception:
 			frappe.log_error(title="Hipersign push: could not build the detailed text")
+	if _rings_like_alarm(n):
+		data["alarm"] = "1"
 	results = []
 	for device in devices:
 		device_doc = frappe.get_doc("Mobile Device", device.name)

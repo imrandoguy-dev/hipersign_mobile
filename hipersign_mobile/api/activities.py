@@ -90,6 +90,7 @@ def create_activity(
 	meeting_link: str | None = None,
 	assigned_to: str | None = None,
 	idempotency_key: str | None = None,
+	reminder_offsets: str | list | None = None,
 	# Convenience aliases matching the spec's request example
 	lead: str | None = None,
 	customer: str | None = None,
@@ -123,6 +124,7 @@ def create_activity(
 		"meeting_link": optional_str(meeting_link, 500),
 		"assigned_to": assigned_to,
 		"idempotency_key": idempotency_key,
+		"reminder_offsets": reminder_offsets,
 	}
 	if not payload["start"]:
 		raise frappe.ValidationError("Start time is required.")
@@ -168,6 +170,7 @@ def update_activity(
 	end: str | None = None,
 	reference_doctype: str | None = None,
 	reference_name: str | None = None,
+	reminder_offsets: str | list | None = None,
 ):
 	"""Edit an open follow-up / meeting. Only the fields sent are changed."""
 	me = frappe.session.user
@@ -184,6 +187,7 @@ def update_activity(
 			"end": end,
 			"reference_doctype": reference_doctype,
 			"reference_name": reference_name,
+			"reminder_offsets": reminder_offsets,
 		}.items()
 		if k in frappe.form_dict or v is not None
 	}

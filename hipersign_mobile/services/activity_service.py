@@ -54,7 +54,11 @@ BASE_FIELDS = [
 	"hm_completion_notes",
 	"hm_trial_booking",
 ]
-OPTIONAL_FIELDS = ["custom_location", "custom_visit_type"]  # present on some sites (e.g. nexus365)
+OPTIONAL_FIELDS = [
+	"custom_location",
+	"custom_visit_type",
+	"hm_reminder_offsets",
+]  # present on some sites (e.g. nexus365)
 
 
 def task_fields() -> list[str]:
@@ -131,6 +135,8 @@ def serialize(
 		"completed_at": timeutil.to_iso(row.get("hm_completed_at")),
 		"completed_by": row.get("hm_completed_by"),
 		"trial_booking": row.get("hm_trial_booking"),
+		# The activity's own reminders (minutes before); null = the person's reminder setting.
+		"reminder_offsets": _offsets(row.get("hm_reminder_offsets")),
 		"reference": {"doctype": row.get("reference_doctype"), "name": row.get("reference_docname")}
 		if row.get("reference_doctype") and row.get("reference_docname")
 		else None,
@@ -139,6 +145,15 @@ def serialize(
 	if with_party:
 		out["party"] = party_summary(row.get("reference_doctype"), row.get("reference_docname"), cc=cc)
 	return out
+
+
+def _offsets(value):
+	from hipersign_mobile.notifications.queue import parse_offsets
+
+	try:
+		return parse_offsets(value)
+	except frappe.ValidationError:
+		return None
 
 
 # ---------------------------------------------------------------- queries
@@ -264,6 +279,12 @@ def create_activity(user: str, payload: dict) -> tuple[frappe.model.document.Doc
 	)
 	if payload.get("location") and frappe.get_meta("CRM Task").has_field("custom_location"):
 		task.custom_location = payload["location"]
+	if payload.get("reminder_offsets") is not None and frappe.get_meta("CRM Task").has_field(
+		"hm_reminder_offsets"
+	):
+		from hipersign_mobile.notifications.queue import offsets_text, parse_offsets
+
+		task.hm_reminder_offsets = offsets_text(parse_offsets(payload["reminder_offsets"]))
 	task.flags.hm_reason = payload.get("reason")
 	task.insert(ignore_permissions=True)
 	return task, True
@@ -362,6 +383,11 @@ def update_details(user: str, task_id, values: dict):
 		put("description", (values.get("description") or "").strip()[:5000] or None)
 	if "meeting_link" in values:
 		put("hm_meeting_link", (values.get("meeting_link") or "").strip()[:500] or None)
+	if "reminder_offsets" in values and frappe.get_meta("CRM Task").has_field("hm_reminder_offsets"):
+		from hipersign_mobile.notifications.queue import offsets_text, parse_offsets
+
+		# "" / null = back to the person's own reminder setting
+		put("hm_reminder_offsets", offsets_text(parse_offsets(values.get("reminder_offsets"))))
 	if "location" in values and frappe.get_meta("CRM Task").has_field("custom_location"):
 		put("custom_location", (values.get("location") or "").strip()[:140] or None)
 	if values.get("reference_doctype") and values.get("reference_name"):

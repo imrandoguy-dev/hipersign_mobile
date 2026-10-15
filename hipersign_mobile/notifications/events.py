@@ -73,9 +73,27 @@ def on_task_changed(doc, before, *, status_changed, schedule_changed, assignee_c
 		schedule_reminder(doc)
 
 
+def _before_label(minutes: int) -> str:
+	if minutes % 1440 == 0:
+		days = minutes // 1440
+		return "tomorrow" if days == 1 else f"in {days} days"
+	if minutes >= 60 and minutes % 60 == 0:
+		return f"in {minutes // 60} h"
+	return f"in {minutes} min"
+
+
+def reminder_offsets_for(doc) -> list[int]:
+	"""The follow-up's own reminders if set, else the person's reminder setting."""
+	try:
+		own = queue.parse_offsets(doc.get("hm_reminder_offsets"))
+	except frappe.ValidationError:
+		own = None
+	return own or queue.get_preferences(doc.assigned_to).reminder_offsets
+
+
 def schedule_reminder(doc):
-	"""(Re)create the pending reminders for an open, scheduled task: one N minutes before
-	(Settings / user preference, default 15) and one again at the exact start time."""
+	"""(Re)create the pending reminders for an open, scheduled task - one per chosen offset
+	(e.g. 15 minutes before and again at the start time)."""
 	if doc.status not in OPEN or not doc.get("assigned_to") or not doc.get("due_date"):
 		queue.cancel_for_reference("CRM Task", doc.name, "Reminder")
 		return
@@ -84,15 +102,20 @@ def schedule_reminder(doc):
 	if due <= now:
 		queue.cancel_for_reference("CRM Task", doc.name, "Reminder")
 		return
-	minutes = queue.get_preferences(doc.assigned_to).reminder_minutes
-	before = due - dt.timedelta(minutes=minutes)
 	base = f"remind:{doc.name}:{doc.assigned_to}:{due.isoformat()}"
 	plan = []  # (key, title, at)
-	if minutes and before > now:
-		plan.append((f"{base}:{minutes}", f"Upcoming {_kind(doc)} in {minutes} min", before))
-	elif minutes:
-		plan.append((f"{base}:{minutes}", f"Upcoming {_kind(doc)} soon", now))
-	plan.append((f"{base}:0", f"{_kind(doc).capitalize()} now", due))
+	missed_early = False
+	for minutes in reminder_offsets_for(doc):
+		at = due - dt.timedelta(minutes=minutes)
+		if minutes == 0:
+			plan.append((f"{base}:0", f"{_kind(doc).capitalize()} now", due))
+		elif at > now:
+			plan.append((f"{base}:{minutes}", f"Upcoming {_kind(doc)} {_before_label(minutes)}", at))
+		else:
+			missed_early = True
+	if missed_early and not any(at <= now + dt.timedelta(minutes=1) for _k, _t, at in plan):
+		# Created / moved too late for the early reminders: one "soon" reminder right away.
+		plan.append((f"{base}:soon", f"Upcoming {_kind(doc)} soon", now))
 	queue.cancel_for_reference("CRM Task", doc.name, "Reminder", keep_keys=[k for k, _t, _a in plan])
 	for key, title, at in plan:
 		queue.enqueue(

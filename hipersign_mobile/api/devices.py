@@ -73,7 +73,9 @@ def get_notification_preferences():
 		"notify_assignments": bool(cint(p.notify_assignments)),
 		"notify_reminders": bool(cint(p.notify_reminders)),
 		"notify_trials": bool(cint(p.notify_trials)),
-		"reminder_choices": [0, 5, 10, 15, 30, 60, 120],
+		"reminder_choices": [0, 5, 10, 15, 30, 60, 120, 1440],
+		"reminder_offsets": list(p.reminder_offsets),
+		"alarm_high_priority": bool(cint(p.alarm_high_priority)),
 	}
 
 
@@ -83,6 +85,8 @@ def update_notification_preferences(
 	notify_assignments: str | int | bool | None = None,
 	notify_reminders: str | int | bool | None = None,
 	notify_trials: str | int | bool | None = None,
+	reminder_offsets: str | list | None = None,
+	alarm_high_priority: str | int | bool | None = None,
 ):
 	me = frappe.session.user
 	doc = (
@@ -102,7 +106,14 @@ def update_notification_preferences(
 	def flag(v):
 		return 1 if str(v).lower() in ("1", "true", "yes", "on") else 0
 
+	if reminder_offsets is not None:
+		offsets = queue.parse_offsets(reminder_offsets)
+		if not offsets:
+			raise frappe.ValidationError("Choose at least one reminder.")
+		doc.reminder_offsets = queue.offsets_text(offsets)
+		doc.reminder_minutes = max(offsets)  # the earliest one (kept for older apps)
 	for field, value in (
+		("alarm_high_priority", alarm_high_priority),
 		("notify_assignments", notify_assignments),
 		("notify_reminders", notify_reminders),
 		("notify_trials", notify_trials),
@@ -111,7 +122,9 @@ def update_notification_preferences(
 			doc.set(field, flag(value))
 	doc.save(ignore_permissions=True) if not doc.is_new() else doc.insert(ignore_permissions=True)
 
-	if reminder_minutes is not None:
+	if reminder_minutes is not None and reminder_offsets is None:
+		doc.db_set("reminder_offsets", None)  # old app: single setting replaces the list
+	if reminder_minutes is not None or reminder_offsets is not None:
 		# Re-plan pending reminders with the new lead time.
 		from hipersign_mobile.notifications.events import schedule_reminder
 

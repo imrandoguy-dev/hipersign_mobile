@@ -112,12 +112,33 @@ def _access_token(force_refresh: bool = False) -> str:
 
 
 def build_message(token: str, title: str, body: str, data: dict | None) -> dict:
+	data = {k: str(v) for k, v in (data or {}).items() if v is not None}  # FCM data values are strings
+	if data.get("alarm") == "1":
+		# Alarm: a data-only message, so the app itself shows it with the alarm sound, repeating
+		# until it is opened or dismissed (a normal notification can't do that).
+		data.update({"title": title, "body": body})
+		return {
+			"message": {
+				"token": token,
+				"data": data,
+				"android": {"priority": "HIGH", "ttl": "3600s"},
+				"apns": {
+					"headers": {"apns-priority": "10", "apns-push-type": "alert"},
+					"payload": {
+						"aps": {
+							"alert": {"title": title, "body": body},
+							"sound": "default",
+							"interruption-level": "time-sensitive",
+						}
+					},
+				},
+			}
+		}
 	return {
 		"message": {
 			"token": token,
 			"notification": {"title": title, "body": body},
-			# FCM data values must be strings.
-			"data": {k: str(v) for k, v in (data or {}).items() if v is not None},
+			"data": data,
 			"android": {
 				"priority": "HIGH",
 				"notification": {

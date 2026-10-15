@@ -101,6 +101,13 @@ CRM_TASK_FIELDS = {
 			"unique": 1,
 			"insert_after": "hm_trial_booking",
 		},
+		{
+			"fieldname": "hm_reminder_offsets",
+			"fieldtype": "Data",
+			"label": "Reminders (Minutes Before)",
+			"insert_after": "hm_completion_notes",
+			"description": "Comma separated, e.g. 15,0 = 15 minutes before and at the start time. Empty = the person's own reminder setting.",
+		},
 	]
 }
 

@@ -127,6 +127,10 @@ def on_update(doc, method=None):
 			reason=reason,
 		)
 
+	reminders_changed = (before.get("hm_reminder_offsets") or "") != (doc.get("hm_reminder_offsets") or "")
+	if reminders_changed and not (status_changed or schedule_changed or assignee_changed):
+		notify.schedule_reminder(doc)  # new reminder times only
+
 	if status_changed or schedule_changed or assignee_changed:
 		notify.on_task_changed(
 			doc,
