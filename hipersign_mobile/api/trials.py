@@ -64,11 +64,32 @@ def list_bookings(
 		if status in ("Active", "Booked", "Rescheduled", "Pending Confirmation")
 		else "start_datetime desc"
 	)
-	names = frappe.get_all(
-		"Trial Booking", filters=filters, pluck="name", order_by=order, start=offset, page_length=limit + 1
+	# One card per trial: its sessions are grouped; the card shows the next session
+	# (or, when none is upcoming, the latest one).
+	rows = frappe.get_all(
+		"Trial Booking",
+		filters=filters,
+		fields=["name", "trial_series", "start_datetime"],
+		order_by=order,
+		limit=1000,
 	)
-	items = [svc.serialize(frappe.get_doc("Trial Booking", n)) for n in names[:limit]]
-	return page_result(items, offset, limit, len(names) > limit)
+	now = timeutil.now_system()
+	groups: dict[str, list] = {}
+	for r in rows:
+		groups.setdefault(r.trial_series or r.name, []).append(r)
+	reps = []
+	for _series, sessions in groups.items():
+		upcoming = sorted(
+			(x for x in sessions if x.start_datetime and frappe.utils.get_datetime(x.start_datetime) >= now),
+			key=lambda x: x.start_datetime,
+		)
+		rep = upcoming[0] if upcoming else max(sessions, key=lambda x: x.start_datetime or now)
+		reps.append(rep)
+	descending = order.endswith("desc")
+	reps.sort(key=lambda x: x.start_datetime or now, reverse=descending)
+	page = reps[offset : offset + limit + 1]
+	items = [svc.serialize(frappe.get_doc("Trial Booking", r.name)) for r in page[:limit]]
+	return page_result(items, offset, limit, len(page) > limit)
 
 
 @mobile_api(methods=("GET",))

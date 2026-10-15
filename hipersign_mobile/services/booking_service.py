@@ -525,50 +525,26 @@ def _same_time_on(day: dt.date, first_start: dt.datetime, trainer: str, booking_
 
 
 def book_series(user: str, *, trial_days: int, trainer_slot: str, idempotency_key=None, **kw):
-	"""Book a trial of `trial_days` trial days (Sundays and holidays don't count): the chosen
-	first session, then the same time with the same trainer on each following trial day. Days
-	she's busy or not working are returned so another time can be picked for them."""
+	"""Book a trial: the trial runs `trial_days` trial days (Sundays and holidays don't count)
+	for the countdown, and this books its first session only. More sessions - each at its own
+	time - are added later with add_session, only when they are needed."""
 	trial_days = max(1, min(cint(trial_days), 60))
 	first, created = book(user, trainer_slot=trainer_slot, idempotency_key=idempotency_key, **kw)
-	start_day = get_datetime(first.start_datetime).date()
-	trial_dates = trial_days_from(start_day, trial_days)
-	end_day = trial_dates[-1] if trial_dates else start_day
-	first.db_set(
-		{
-			"trial_series": first.name,
-			"session_no": 1,
-			"trial_days": trial_days,
-			"trial_start_date": start_day,
-			"trial_end_date": end_day,
-		},
-		update_modified=False,
-	)
-	skipped = []
-	if created and trial_days > 1:
-		first_start = get_datetime(first.start_datetime)
-		for day in trial_dates[1:]:
-			slot_id, reason = _same_time_on(day, first_start, first.trainer, first.booking_type)
-			if slot_id:
-				frappe.db.savepoint("hm_trial_day")
-				try:
-					book(
-						user,
-						trainer_slot=slot_id,
-						idempotency_key=f"{idempotency_key}:{day}" if idempotency_key else None,
-						series=_series_fields(first),
-						**kw,
-					)
-				except (ConflictError, frappe.ValidationError) as exc:
-					frappe.db.rollback(save_point="hm_trial_day")
-					frappe.local.message_log = []
-					skipped.append({"date": str(day), "reason": str(exc) or "Not available"})
-			else:
-				# A trial day when the trainer is busy or not working (e.g. her leave):
-				# reported so another time / trainer can be picked for it.
-				skipped.append({"date": str(day), "reason": reason})
-		_renumber(first.name)
-	first.reload()
-	return first, created, skipped
+	if created:
+		start_day = get_datetime(first.start_datetime).date()
+		trial_dates = trial_days_from(start_day, trial_days)
+		first.db_set(
+			{
+				"trial_series": first.name,
+				"session_no": 1,
+				"trial_days": trial_days,
+				"trial_start_date": start_day,
+				"trial_end_date": trial_dates[-1] if trial_dates else start_day,
+			},
+			update_modified=False,
+		)
+		first.reload()
+	return first, created, []
 
 
 def _series_fields(first) -> dict:

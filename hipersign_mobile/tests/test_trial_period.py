@@ -46,33 +46,32 @@ class TestTrialPeriod(TestCase):
 		r = call(trials.get_available_slots, self.sales, start_date=str(day), end_date=str(day), trainer=self.trainer)
 		return next(i["id"] for i in r["data"]["items"] if i["start"][11:16] == hhmm)
 
-	def test_seven_day_trial_books_each_working_day(self):
+	def test_trial_books_one_session_then_sessions_are_added_at_their_own_times(self):
 		mon = _monday(2)
-		# trainer busy on Wednesday at 10:30
-		make_task(self.trainer, dt.datetime.combine(mon + dt.timedelta(days=2), dt.time(10, 30)),
-				  ref=("Customer", self.customer), hm_end_datetime=dt.datetime.combine(mon + dt.timedelta(days=2), dt.time(11, 30)))
 		r = call(trials.book_trial, self.sales, trainer_slot=self._slot(mon), customer=self.customer,
-				 booking_type="ERP Trial", trial_days=7, idempotency_key="trial-7")
+				 booking_type="ERP Trial", trial_days=3, idempotency_key="trial-3")
 		self.assertTrue(r["success"], r)
 		t = r["data"]["booking"]["trial"]
-		# 7 trial days: Mon-Sat, Sunday skipped, so it ends the next Monday
-		self.assertEqual((t["days"], t["start_date"], t["end_date"]), (7, str(mon), str(mon + dt.timedelta(days=7))))
-		# 7 trial days minus the busy Wednesday = 6 sessions
-		self.assertEqual(len(t["sessions"]), 6)
-		self.assertEqual([s["session_no"] for s in t["sessions"]], [1, 2, 3, 4, 5, 6])
-		self.assertNotIn(str(mon + dt.timedelta(days=6)), [s["start"][:10] for s in t["sessions"]])  # no Sunday
-		self.assertEqual(r["data"]["skipped"], [{"date": str(mon + dt.timedelta(days=2)), "reason": "Trainer is busy at this time"}])
-		self.assertEqual(t["phase"], "upcoming")
+		# 3 trial days for the countdown, but only the first session is booked
+		self.assertEqual((t["days"], t["start_date"], t["end_date"]), (3, str(mon), str(mon + dt.timedelta(days=2))))
+		self.assertEqual(len(t["sessions"]), 1)
+		self.assertEqual(r["data"]["skipped"], [])
 
-		# add the missing Wednesday at another time
+		# a second session on Wednesday at a different time
 		r2 = call(trials.add_trial_session, self.sales, booking_id=t["series"],
 				  trainer_slot=self._slot(mon + dt.timedelta(days=2), "14:30"))
 		self.assertTrue(r2["success"], r2)
-		self.assertEqual(len(r2["data"]["booking"]["trial"]["sessions"]), 7)
+		t2 = r2["data"]["booking"]["trial"]
+		self.assertEqual([s["start"][11:16] for s in t2["sessions"]], ["10:30", "14:30"])
+		self.assertEqual([s["session_no"] for s in t2["sessions"]], [1, 2])
 
-		# change the length to 5 days
+		# the trials list shows the trial once
+		lst = call(trials.list_bookings, self.sales, status="Active")["data"]["items"]
+		self.assertEqual(sum(1 for b in lst if (b.get("trial") or {}).get("series") == t["series"]), 1)
+
+		# change the length to 5 days (Mon..Fri)
 		r3 = call(trials.set_trial_days, self.sales, booking_id=t["series"], days=5)
-		self.assertEqual(r3["data"]["booking"]["trial"]["end_date"], str(mon + dt.timedelta(days=4)))  # Fri
+		self.assertEqual(r3["data"]["booking"]["trial"]["end_date"], str(mon + dt.timedelta(days=4)))
 
 	def test_countdown_skips_sundays_and_holidays(self):
 		# Mon 19 Oct 2026 + 7 trial days, Thu 22 is a holiday -> Mon..Wed, Fri, Sat, Mon 26, Tue 27
