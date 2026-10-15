@@ -326,6 +326,80 @@ def reschedule(user: str, task_id, new_start, new_end=None, reason=None):
 	return task, True
 
 
+def update_details(user: str, task_id, values: dict):
+	"""Edit an open activity from the app: title, type, priority, notes, place, link, customer
+	and time. A time change is recorded in the history like a reschedule."""
+	task = perms.get_task_for(task_id, user, for_update=True)
+	if task.status not in OPEN_STATUSES:
+		raise frappe.ValidationError("Only open activities can be edited.")
+	changed = False
+
+	def put(field, value):
+		nonlocal changed
+		if (task.get(field) or None) != (value or None):
+			task.set(field, value)
+			changed = True
+
+	if "title" in values:
+		title = (values.get("title") or "").strip()
+		if not title:
+			raise frappe.ValidationError("Title is required.")
+		put("title", title[:140])
+	if "activity_type" in values:
+		kind = values.get("activity_type")
+		if task.get("hm_trial_booking") or task.get("hm_activity_type") == "Trial":
+			if kind and kind != "Trial":
+				raise frappe.ValidationError("A trial stays a trial. Change it from the trial booking.")
+		elif kind not in ("Follow-up", "Meeting"):
+			raise frappe.ValidationError("Type must be Follow-up or Meeting.")
+		else:
+			put("hm_activity_type", kind)
+	if "priority" in values:
+		if values.get("priority") not in ("Low", "Medium", "High"):
+			raise frappe.ValidationError("Priority must be Low, Medium or High.")
+		put("priority", values["priority"])
+	if "description" in values:
+		put("description", (values.get("description") or "").strip()[:5000] or None)
+	if "meeting_link" in values:
+		put("hm_meeting_link", (values.get("meeting_link") or "").strip()[:500] or None)
+	if "location" in values and frappe.get_meta("CRM Task").has_field("custom_location"):
+		put("custom_location", (values.get("location") or "").strip()[:140] or None)
+	if values.get("reference_doctype") and values.get("reference_name"):
+		ref_dt, ref_name = values["reference_doctype"], values["reference_name"]
+		if (ref_dt, ref_name) != (task.reference_doctype, task.reference_docname):
+			if ref_dt not in perms.PARTY_DOCTYPES:
+				raise frappe.ValidationError("Link the activity to a Customer, CRM Lead or CRM Deal.")
+			if task.get("hm_trial_booking"):
+				raise frappe.ValidationError("The customer of a trial is changed from the trial booking.")
+			perms.require_party(ref_dt, ref_name, user)
+			put("reference_doctype", ref_dt)
+			put("reference_docname", ref_name)
+
+	if values.get("start"):
+		start = timeutil.parse_client_datetime(values["start"], user)
+		end = timeutil.parse_client_datetime(values["end"], user) if values.get("end") else None
+		if end and end <= start:
+			raise frappe.ValidationError("End time must be after the start time.")
+		same_start = task.due_date and get_datetime(task.due_date) == start
+		same_end = end is None or end_of(task) == end
+		if not (same_start and same_end):
+			if task.get("hm_trial_booking"):
+				raise frappe.ValidationError(
+					"This activity belongs to a trial booking. Reschedule the booking instead."
+				)
+			if end is None and task.due_date and task.hm_end_datetime:
+				end = start + (get_datetime(task.hm_end_datetime) - get_datetime(task.due_date))
+			task.due_date = start
+			task.start_date = start.date()
+			task.hm_end_datetime = end
+			changed = True
+
+	if changed:
+		task.flags.hm_reason = (values.get("reason") or "").strip()[:2000] or None
+		task.save(ignore_permissions=True)
+	return task, changed
+
+
 def add_history(task_name, event_type: str, actor: str | None = None, **values):
 	doc = frappe.new_doc("Sales Activity History")
 	doc.update(

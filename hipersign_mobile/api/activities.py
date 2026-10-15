@@ -156,6 +156,45 @@ def update_status(activity_id: str | int, status: str, outcome: str | None = Non
 
 
 @mobile_api(methods=("POST",))
+def update_activity(
+	activity_id: str | int,
+	title: str | None = None,
+	activity_type: str | None = None,
+	priority: str | None = None,
+	description: str | None = None,
+	location: str | None = None,
+	meeting_link: str | None = None,
+	start: str | None = None,
+	end: str | None = None,
+	reference_doctype: str | None = None,
+	reference_name: str | None = None,
+):
+	"""Edit an open follow-up / meeting. Only the fields sent are changed."""
+	me = frappe.session.user
+	sent = {
+		k: v
+		for k, v in {
+			"title": title,
+			"activity_type": activity_type,
+			"priority": priority,
+			"description": description,
+			"location": location,
+			"meeting_link": meeting_link,
+			"start": start,
+			"end": end,
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_name,
+		}.items()
+		if k in frappe.form_dict or v is not None
+	}
+	task, changed = svc.update_details(me, activity_id, sent)
+	row = frappe.db.get_value("CRM Task", task.name, svc.task_fields(), as_dict=True)
+	data = svc.serialize(row)
+	data["history"] = svc.history_for(task.name)[:5]
+	return {"changed": changed, "activity": data}
+
+
+@mobile_api(methods=("POST",))
 def reschedule_activity(
 	activity_id: str | int,
 	new_start_datetime: str | None = None,

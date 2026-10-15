@@ -465,3 +465,43 @@ def phone_directory():
 
 	items = list(entries.values())[:50000]
 	return {"items": items, "count": len(items), "generated_at": frappe.utils.now()}
+
+
+@mobile_api(methods=("GET",))
+def edit_form(doctype: str | None = None, name: str | None = None):
+	"""Fields the app may edit for this customer / lead / deal, with current values and choices."""
+	from hipersign_mobile.services import party_edit
+
+	me = frappe.session.user
+	perms.require("customers", me)
+	doctype = choice(doctype, perms.PARTY_DOCTYPES, "doctype")
+	name = require_str(name, "name")
+	perms.require_party(doctype, name, me)
+	return {"fields": party_edit.form(doctype, name)}
+
+
+@mobile_api(methods=("POST",))
+def update_party(doctype: str | None = None, name: str | None = None, values=None):
+	"""Save edits from the app. `values` = {field key: new value} (only changed fields)."""
+	import json
+
+	from hipersign_mobile.services import party_edit
+
+	me = frappe.session.user
+	perms.require("customers", me)
+	limit_per_user("party_edit", 30, 60)
+	doctype = choice(doctype, perms.PARTY_DOCTYPES, "doctype")
+	name = require_str(name, "name")
+	perms.require_party(doctype, name, me)
+	if isinstance(values, str):
+		try:
+			values = json.loads(values)
+		except ValueError:
+			raise frappe.ValidationError("values must be JSON.")
+	if not isinstance(values, dict) or not values:
+		raise frappe.ValidationError("Nothing to save.")
+	changed = party_edit.save(doctype, name, values)
+	frappe.local.hm_party_cache = {}
+	data = _detail(doctype, name, None)
+	data["changed"] = changed
+	return data
