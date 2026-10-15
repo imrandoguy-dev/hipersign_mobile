@@ -540,6 +540,37 @@ class TestNotifications(Base):
 		self.assertEqual(data["route"], f"/activity/{t.name}")  # tap opens the activity
 		self.assertEqual(data["reference_doctype"], "CRM Task")
 
+	def _deliver_reminder(self, show_details: int):
+		self._register(self.s1, f"dev-det-{self.uid}", "tok-det")
+		t = make_task(self.s1, future(3, hour=10), title="Discuss AMC renewal", ref=("Customer", self.cust),
+					  description="<p>Bring the <b>new price list</b></p>")
+		svc_add = __import__("hipersign_mobile.services.activity_service", fromlist=["add_history"])
+		svc_add.add_history(t.name, "Note Added", actor=self.s1, reason="Asked to call after 10")
+		name = frappe.db.get_value("Mobile Notification", {"reference_name": str(t.name), "event_type": "Reminder"}, "name")
+		frappe.db.set_single_value("Hipersign Mobile Settings", "push_show_details", show_details)
+		frappe.clear_document_cache("Hipersign Mobile Settings", "Hipersign Mobile Settings")
+		fake = FakeFCM(fcm.SendResult(ok=True, message_id="m-1"))
+		try:
+			with patch.object(fcm, "send", fake):
+				queue.deliver(name)
+		finally:
+			frappe.db.set_single_value("Hipersign Mobile Settings", "push_show_details", 1)
+			frappe.clear_document_cache("Hipersign Mobile Settings", "Hipersign Mobile Settings")
+		return fake.calls[-1][1], fake.calls[-1][2]
+
+	def test_reminder_shows_customer_title_and_notes(self):
+		title, body = self._deliver_reminder(1)
+		cust_name = frappe.db.get_value("Customer", self.cust, "customer_name")
+		self.assertIn(cust_name, title)
+		self.assertIn("Discuss AMC renewal", body)
+		self.assertIn("Notes: Bring the new price list", body)
+		self.assertIn("Last note: Asked to call after 10", body)
+
+	def test_reminder_details_can_be_hidden(self):
+		title, body = self._deliver_reminder(0)
+		self.assertNotIn("AMC", title + body)
+		self.assertNotIn("price list", body)
+
 	def test_invalid_token_deactivates_device_without_crash(self):
 		self._register(self.s2, f"dev-bad-{self.uid}", "tok-bad")
 		n = queue.enqueue(self.s2, "Test", "Hello", "Body", dedup_key=f"test-invalid-token-{self.uid}")

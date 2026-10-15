@@ -190,7 +190,7 @@ def setup():
 
 # Settings added in later versions: on an existing site the new fields start empty (an
 # unticked checkbox), so give them their intended default once - never overriding a saved value.
-NEW_SETTING_DEFAULTS = {"enable_call_recordings": "1", "max_recording_mb": "50"}
+NEW_SETTING_DEFAULTS = {"enable_call_recordings": "1", "max_recording_mb": "50", "push_show_details": "1"}
 
 
 def apply_new_setting_defaults():

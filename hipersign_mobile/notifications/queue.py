@@ -185,13 +185,23 @@ def deliver(notification: str):
 		"reference_name": n.reference_name,
 		"route": route_for(n.reference_doctype, n.reference_name),
 	}
+	title, body = n.title or "Hipersign", n.body or ""
+	if s.push_show_details:
+		try:
+			from hipersign_mobile.notifications.events import detailed_text
+
+			detailed = detailed_text(n)
+			if detailed:
+				title, body = detailed
+		except Exception:
+			frappe.log_error(title="Hipersign push: could not build the detailed text")
 	results = []
 	for device in devices:
 		device_doc = frappe.get_doc("Mobile Device", device.name)
 		token = device_doc.get_password("push_token", raise_exception=False)
 		if not token:
 			continue
-		result = fcm.send(token, n.title or "Hipersign", n.body or "", data)
+		result = fcm.send(token, title, body, data)
 		if result.invalid_token:
 			frappe.db.set_value("Mobile Device", device.name, "is_active", 0, update_modified=False)
 		results.append(result)

@@ -17,6 +17,7 @@ DEFAULTS = {
 	"max_recording_mb": 50,
 	"enable_google_lookup": 0,
 	"google_lead_source": "Google Maps",
+	"push_show_details": 1,
 }
 
 
@@ -43,6 +44,7 @@ def get() -> frappe._dict:
 	out.enable_push = cint(out.enable_push)
 	out.enable_call_recordings = cint(out.enable_call_recordings)
 	out.enable_google_lookup = cint(out.enable_google_lookup)
+	out.push_show_details = cint(out.push_show_details)
 	out.restrict_task_visibility = cint(out.restrict_task_visibility)
 	out.default_country_code = "".join(ch for ch in str(out.default_country_code) if ch.isdigit()) or "91"
 	return out

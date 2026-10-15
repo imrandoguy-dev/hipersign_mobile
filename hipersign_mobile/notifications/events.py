@@ -1,7 +1,8 @@
 """Business events -> notifications.
 
-Push payloads stay generic (no customer names, numbers or notes); the app
-fetches the authorised details after the user taps the notification.
+The stored notification is generic (time only). When it is sent, the text is rebuilt from the
+activity as it is *then* - customer, follow-up title, notes, latest note - unless
+"Show Customer and Notes in Notifications" is switched off in Hipersign Mobile Settings.
 """
 
 from __future__ import annotations
@@ -118,3 +119,51 @@ def on_trial_event(booking, event: str, recipients: list[str]):
 			reference_doctype="Trial Booking",
 			reference_name=booking.name,
 		)
+
+
+# ---------------------------------------------------------------- detailed text (at send time)
+
+
+def _clip(text: str | None, limit: int) -> str:
+	text = " ".join((text or "").split())
+	return (text[: limit - 1] + "…") if len(text) > limit else text
+
+
+def detailed_text(n) -> tuple[str, str] | None:
+	"""(title, body) with the customer and notes for a CRM Task notification, or None."""
+	if n.reference_doctype != "CRM Task" or not n.reference_name:
+		return None
+	if not frappe.db.exists("CRM Task", n.reference_name):
+		return None
+	from hipersign_mobile.api.notes import html_to_text
+	from hipersign_mobile.services.party import party_summary
+
+	task = frappe.get_doc("CRM Task", n.reference_name)
+	party = None
+	if task.reference_doctype and task.reference_docname:
+		try:
+			party = (party_summary(task.reference_doctype, task.reference_docname) or {}).get("name")
+		except Exception:
+			party = None
+	headline = (n.title or "Hipersign").strip()
+	title = _clip(f"{headline} · {party}" if party else headline, 120)
+
+	lines = []
+	when = _when(task.get("due_date")) if task.get("due_date") else None
+	lines.append(" · ".join(x for x in (when, _clip(task.title, 120)) if x))
+	place = task.get("custom_location")
+	if place:
+		lines.append(f"Place: {_clip(place, 100)}")
+	notes = html_to_text(task.get("description"))
+	if notes and notes.strip() != (task.title or "").strip():
+		lines.append(f"Notes: {_clip(notes, 300)}")
+	last = frappe.get_all(
+		"Sales Activity History",
+		filters={"crm_task": task.name, "event_type": "Note Added"},
+		fields=["reason"],
+		order_by="event_datetime desc",
+		limit=1,
+	)
+	if last and last[0].reason:
+		lines.append(f"Last note: {_clip(last[0].reason, 200)}")
+	return title, "\n".join(lines)
