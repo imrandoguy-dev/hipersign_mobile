@@ -407,8 +407,57 @@ def series_sessions(series: str) -> list:
 	)
 
 
+def trial_holiday_list() -> str | None:
+	"""Holiday List used to count trial days (Settings, else the default company's)."""
+	name = frappe.db.get_single_value("Hipersign Mobile Settings", "trial_holiday_list")
+	if name:
+		return name
+	company = frappe.defaults.get_global_default("company") or frappe.db.get_value("Company", {}, "name")
+	return frappe.get_cached_value("Company", company, "default_holiday_list") if company else None
+
+
+def _holiday_dates(start: dt.date, end: dt.date) -> set:
+	hl = trial_holiday_list()
+	if not hl:
+		return set()
+	return {
+		getdate(d)
+		for d in frappe.get_all(
+			"Holiday", filters={"parent": hl, "holiday_date": ["between", [start, end]]}, pluck="holiday_date"
+		)
+	}
+
+
+def is_trial_day(d: dt.date, holidays: set) -> bool:
+	return d.weekday() != 6 and d not in holidays  # not Sunday, not a holiday
+
+
+def trial_days_from(start: dt.date, n: int) -> list[dt.date]:
+	"""The first n trial days from `start` (skipping Sundays and holidays)."""
+	holidays = _holiday_dates(start, start + dt.timedelta(days=n * 2 + 31))
+	out, d = [], start
+	while len(out) < n:
+		if is_trial_day(d, holidays):
+			out.append(d)
+		d += dt.timedelta(days=1)
+		if (d - start).days > 366:
+			break
+	return out
+
+
+def _count_trial_days(a: dt.date, b: dt.date, holidays: set) -> int:
+	"""Trial days in [a, b] inclusive."""
+	n, d = 0, a
+	while d <= b:
+		if is_trial_day(d, holidays):
+			n += 1
+		d += dt.timedelta(days=1)
+	return n
+
+
 def trial_info(b, today: dt.date | None = None) -> dict | None:
-	"""Countdown of a trial period (calendar days): day N of D, days left, sessions."""
+	"""Countdown of a trial period in trial days (Sundays and holidays don't count):
+	day N of D, days left, sessions."""
 	series = b.get("trial_series")
 	days = cint(b.get("trial_days")) or 1
 	if not series:
@@ -418,12 +467,17 @@ def trial_info(b, today: dt.date | None = None) -> dict | None:
 	)
 	end = getdate(b.trial_end_date) if b.get("trial_end_date") else start + dt.timedelta(days=days - 1)
 	today = today or dt.datetime.now(timeutil.user_tz()).date()
+	holidays = _holiday_dates(min(start, today), max(end, today))
+	today_off = not is_trial_day(today, holidays)
 	if today < start:
-		phase, day_no, left = "upcoming", 0, (end - today).days + 1
+		phase, day_no, left = "upcoming", 0, days
 	elif today > end:
 		phase, day_no, left = "ended", days, 0
 	else:
-		phase, day_no, left = "running", (today - start).days + 1, (end - today).days
+		done = _count_trial_days(start, today, holidays)  # includes today if it's a trial day
+		phase = "running"
+		day_no = done  # on a Sunday / holiday: the last trial day reached (paused)
+		left = max(days - done, 0)
 	sessions = series_sessions(series)
 	return {
 		"series": series,
@@ -434,6 +488,7 @@ def trial_info(b, today: dt.date | None = None) -> dict | None:
 		"day_no": day_no,
 		"days_left": left,
 		"starts_in": (start - today).days if phase == "upcoming" else 0,
+		"today_off": today_off and phase == "running",  # Sunday / holiday: the trial pauses
 		"sessions": [
 			{
 				"id": x.name,
@@ -456,7 +511,7 @@ def _same_time_on(day: dt.date, first_start: dt.datetime, trainer: str, booking_
 	when = dt.datetime.combine(day, first_start.time())
 	windows = trainer_hours.working_windows(trainer, day, day)
 	if day not in windows:
-		return None, "Trainer's day off"
+		return None, "Trainer is not working that day"
 	free = available_slots(
 		dt.datetime.combine(day, dt.time.min),
 		dt.datetime.combine(day, dt.time.max),
@@ -470,13 +525,14 @@ def _same_time_on(day: dt.date, first_start: dt.datetime, trainer: str, booking_
 
 
 def book_series(user: str, *, trial_days: int, trainer_slot: str, idempotency_key=None, **kw):
-	"""Book a trial of `trial_days` calendar days: the chosen first session, then the same time
-	with the same trainer on each following day she works. Days she's off are skipped; days
-	she's busy are returned so another time can be picked for them."""
+	"""Book a trial of `trial_days` trial days (Sundays and holidays don't count): the chosen
+	first session, then the same time with the same trainer on each following trial day. Days
+	she's busy or not working are returned so another time can be picked for them."""
 	trial_days = max(1, min(cint(trial_days), 60))
 	first, created = book(user, trainer_slot=trainer_slot, idempotency_key=idempotency_key, **kw)
 	start_day = get_datetime(first.start_datetime).date()
-	end_day = start_day + dt.timedelta(days=trial_days - 1)
+	trial_dates = trial_days_from(start_day, trial_days)
+	end_day = trial_dates[-1] if trial_dates else start_day
 	first.db_set(
 		{
 			"trial_series": first.name,
@@ -490,8 +546,7 @@ def book_series(user: str, *, trial_days: int, trainer_slot: str, idempotency_ke
 	skipped = []
 	if created and trial_days > 1:
 		first_start = get_datetime(first.start_datetime)
-		day = start_day + dt.timedelta(days=1)
-		while day <= end_day:
+		for day in trial_dates[1:]:
 			slot_id, reason = _same_time_on(day, first_start, first.trainer, first.booking_type)
 			if slot_id:
 				frappe.db.savepoint("hm_trial_day")
@@ -507,9 +562,10 @@ def book_series(user: str, *, trial_days: int, trainer_slot: str, idempotency_ke
 					frappe.db.rollback(save_point="hm_trial_day")
 					frappe.local.message_log = []
 					skipped.append({"date": str(day), "reason": str(exc) or "Not available"})
-			elif reason != "Trainer's day off":
+			else:
+				# A trial day when the trainer is busy or not working (e.g. her leave):
+				# reported so another time / trainer can be picked for it.
 				skipped.append({"date": str(day), "reason": reason})
-			day += dt.timedelta(days=1)
 		_renumber(first.name)
 	first.reload()
 	return first, created, skipped
@@ -559,7 +615,7 @@ def add_session(user: str, booking_id: str, trainer_slot: str, idempotency_key=N
 
 
 def set_trial_days(user: str, booking_id: str, days: int):
-	"""Change the trial length (calendar days) for every session of the trial."""
+	"""Change the trial length (trial days; Sundays and holidays don't count) for the whole trial."""
 	b = _get_booking_for(user, booking_id)
 	days = cint(days)
 	if days < 1 or days > 60:
@@ -572,7 +628,7 @@ def set_trial_days(user: str, booking_id: str, days: int):
 			frappe.db.get_value("Trial Booking", series, "start_datetime") or b.start_datetime
 		).date()
 	)
-	end = start + dt.timedelta(days=days - 1)
+	end = trial_days_from(start, days)[-1]  # Sundays and holidays don't count
 	names = [x.name for x in series_sessions(series)] or [b.name]
 	for name in names:
 		frappe.db.set_value(

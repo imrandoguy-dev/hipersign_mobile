@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-15 07:30:00.000000",
+ "creation": "2026-10-15 08:45:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -44,6 +44,7 @@
   "trial_slot_minutes",
   "lunch_break_start",
   "lunch_break_end",
+  "trial_holiday_list",
   "whatsapp_section",
   "enable_whatsapp_rules",
   "whatsapp_rules"
@@ -296,6 +297,13 @@
    "label": "Lunch Break To"
   },
   {
+   "description": "Multi-day trials count only working days: Sundays and the holidays in this list are skipped (the end date moves later). Empty = the default company's holiday list.",
+   "fieldname": "trial_holiday_list",
+   "fieldtype": "Link",
+   "label": "Holiday List For Trial Days",
+   "options": "Holiday List"
+  },
+  {
    "fieldname": "whatsapp_section",
    "fieldtype": "Section Break",
    "label": "Automatic WhatsApp Messages"
@@ -319,7 +327,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-15 07:30:00.000000",
+ "modified": "2026-10-15 08:45:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",
