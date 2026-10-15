@@ -14,7 +14,8 @@ class TrainerSlot(Document):
 
 		roles = set(frappe.get_roles())
 		privileged = roles & {"System Manager", "Hipersign Manager"}
-		if not privileged and self.trainer != frappe.session.user:
+		# hm_auto: created by the booking service from the trainer's working hours.
+		if not privileged and self.trainer != frappe.session.user and not self.flags.hm_auto:
 			frappe.throw("Trainers can only manage their own availability.", frappe.PermissionError)
 
 		if self.status in ("Available", "Reserved"):

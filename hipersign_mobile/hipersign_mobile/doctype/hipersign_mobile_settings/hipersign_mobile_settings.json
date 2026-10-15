@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-15 06:10:00.000000",
+ "creation": "2026-10-15 07:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -35,6 +35,13 @@
   "google_maps_api_key",
   "column_break_5",
   "google_lead_source",
+  "trainer_section",
+  "auto_trainer_slots",
+  "trainer_working_days",
+  "column_break_6",
+  "trainer_day_start",
+  "trainer_day_end",
+  "trial_slot_minutes",
   "whatsapp_section",
   "enable_whatsapp_rules",
   "whatsapp_rules"
@@ -227,6 +234,51 @@
    "options": "CRM Lead Source"
   },
   {
+   "fieldname": "trainer_section",
+   "fieldtype": "Section Break",
+   "label": "Trainer Availability (Trial Booking)"
+  },
+  {
+   "default": "1",
+   "description": "Salespeople can book a trial with any trainer at any free time inside working hours - no need to create Trainer Slots by hand. A trainer is busy when she already has a trial, or an open follow-up / meeting assigned to her at that time. Trainer Slots created by hand still work too.",
+   "fieldname": "auto_trainer_slots",
+   "fieldtype": "Check",
+   "label": "Trainers Are Free During Working Hours"
+  },
+  {
+   "default": "Mon,Tue,Wed,Thu,Fri,Sat",
+   "depends_on": "auto_trainer_slots",
+   "description": "Comma separated: Mon,Tue,Wed,Thu,Fri,Sat,Sun",
+   "fieldname": "trainer_working_days",
+   "fieldtype": "Data",
+   "label": "Working Days"
+  },
+  {
+   "fieldname": "column_break_6",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "09:30:00",
+   "depends_on": "auto_trainer_slots",
+   "fieldname": "trainer_day_start",
+   "fieldtype": "Time",
+   "label": "Day Starts At"
+  },
+  {
+   "default": "18:00:00",
+   "depends_on": "auto_trainer_slots",
+   "fieldname": "trainer_day_end",
+   "fieldtype": "Time",
+   "label": "Day Ends At"
+  },
+  {
+   "default": "60",
+   "depends_on": "auto_trainer_slots",
+   "fieldname": "trial_slot_minutes",
+   "fieldtype": "Int",
+   "label": "Trial Length (Minutes)"
+  },
+  {
    "fieldname": "whatsapp_section",
    "fieldtype": "Section Break",
    "label": "Automatic WhatsApp Messages"
@@ -250,7 +302,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-15 06:10:00.000000",
+ "modified": "2026-10-15 07:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",

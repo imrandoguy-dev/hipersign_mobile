@@ -13,7 +13,7 @@ import frappe
 from frappe.utils import get_datetime
 
 from hipersign_mobile.services import permissions as perms
-from hipersign_mobile.services import timeutil
+from hipersign_mobile.services import timeutil, trainer_hours
 from hipersign_mobile.services.errors import ConflictError
 from hipersign_mobile.services.party import party_summary
 
@@ -110,6 +110,8 @@ def book(
 			return frappe.get_doc("Trial Booking", existing.name), False
 
 	ref_doctype, ref_name = _party(customer, lead, user)
+	if str(trainer_slot or "").startswith(trainer_hours.PREFIX):
+		trainer_slot = trainer_hours.materialize(trainer_slot)  # free time from working hours
 	slot = _load_slot_for_booking(trainer_slot, booking_type)
 	summary = party_summary(ref_doctype, ref_name) or {}
 
@@ -197,6 +199,8 @@ def reschedule(user: str, booking_id: str, new_slot: str, reason: str | None = N
 		raise frappe.ValidationError("Only active bookings can be rescheduled.")
 	if booking.trainer_slot == new_slot:
 		return booking, False
+	if str(new_slot or "").startswith(trainer_hours.PREFIX):
+		new_slot = trainer_hours.materialize(new_slot)
 	new_trainer = frappe.db.get_value("Trainer Slot", new_slot, "trainer")
 	if new_trainer and new_trainer != booking.trainer:
 		lock_trainer(new_trainer)
@@ -310,7 +314,33 @@ def available_slots(
 				"meeting_link": s.meeting_link,
 			}
 		)
-	return out
+	# Free times from working hours (no hand-made slot needed).
+	if not booking_type or "Both" in SLOT_TYPE_FOR.get(booking_type, ("Both",)):
+		published = {}
+		for o in out:
+			published.setdefault(o["trainer"], []).append(
+				(
+					get_datetime(timeutil.parse_client_datetime(o["start"])),
+					get_datetime(timeutil.parse_client_datetime(o["end"])),
+				)
+			)
+		for f in trainer_hours.free_times(start, end, trainer=trainer, limit=limit):
+			if any(f["start"] < pe and f["end"] > ps for ps, pe in published.get(f["trainer"], [])):
+				continue
+			out.append(
+				{
+					"id": f["id"],
+					"trainer": f["trainer"],
+					"trainer_name": frappe.utils.get_fullname(f["trainer"]),
+					"slot_type": "Both",
+					"start": timeutil.to_iso(f["start"]),
+					"end": timeutil.to_iso(f["end"]),
+					"location": None,
+					"meeting_link": None,
+				}
+			)
+		out.sort(key=lambda o: (o["start"], o["trainer_name"] or ""))
+	return out[:limit]
 
 
 def serialize(b) -> dict:

@@ -162,7 +162,15 @@ def book_trial(
 
 
 def _alternatives(slot_name, booking_type):
-	start = frappe.db.get_value("Trainer Slot", slot_name, "start_datetime")
+	if str(slot_name or "").startswith("auto:"):
+		from hipersign_mobile.services import trainer_hours
+
+		try:
+			start = trainer_hours.parse_id(slot_name)[1]
+		except frappe.ValidationError:
+			return []
+	else:
+		start = frappe.db.get_value("Trainer Slot", slot_name, "start_datetime")
 	if not start:
 		return []
 	start = frappe.utils.get_datetime(start)

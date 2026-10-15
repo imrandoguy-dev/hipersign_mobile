@@ -197,7 +197,16 @@ def setup():
 
 # Settings added in later versions: on an existing site the new fields start empty (an
 # unticked checkbox), so give them their intended default once - never overriding a saved value.
-NEW_SETTING_DEFAULTS = {"enable_call_recordings": "1", "max_recording_mb": "50", "push_show_details": "1"}
+NEW_SETTING_DEFAULTS = {
+	"enable_call_recordings": "1",
+	"max_recording_mb": "50",
+	"push_show_details": "1",
+	"auto_trainer_slots": "1",
+	"trainer_working_days": "Mon,Tue,Wed,Thu,Fri,Sat",
+	"trainer_day_start": "09:30:00",
+	"trainer_day_end": "18:00:00",
+	"trial_slot_minutes": "60",
+}
 
 
 def apply_new_setting_defaults():

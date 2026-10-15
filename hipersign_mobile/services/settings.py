@@ -18,6 +18,11 @@ DEFAULTS = {
 	"enable_google_lookup": 0,
 	"google_lead_source": "Google Maps",
 	"push_show_details": 1,
+	"auto_trainer_slots": 1,
+	"trainer_working_days": "Mon,Tue,Wed,Thu,Fri,Sat",
+	"trainer_day_start": "09:30:00",
+	"trainer_day_end": "18:00:00",
+	"trial_slot_minutes": 60,
 }
 
 
@@ -39,12 +44,14 @@ def get() -> frappe._dict:
 		"max_push_attempts",
 		"notification_retention_days",
 		"max_recording_mb",
+		"trial_slot_minutes",
 	):
 		out[key] = cint(out[key]) or DEFAULTS[key]
 	out.enable_push = cint(out.enable_push)
 	out.enable_call_recordings = cint(out.enable_call_recordings)
 	out.enable_google_lookup = cint(out.enable_google_lookup)
 	out.push_show_details = cint(out.push_show_details)
+	out.auto_trainer_slots = cint(out.auto_trainer_slots)
 	out.restrict_task_visibility = cint(out.restrict_task_visibility)
 	out.default_country_code = "".join(ch for ch in str(out.default_country_code) if ch.isdigit()) or "91"
 	return out
