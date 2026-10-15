@@ -188,7 +188,7 @@ def whatsapp_status(doctype: str | None = None, name: str | None = None, since: 
 
 
 KINDS = {"Customer": "Customer", "CRM Lead": "Lead", "CRM Deal": "Deal"}
-CALL_FILTERS = ("all", "connected", "not_connected", "incoming", "missed")
+CALL_FILTERS = ("all", "not_reached", "connected", "not_connected", "incoming", "missed")
 
 
 @mobile_api(methods=("GET",))
@@ -210,6 +210,11 @@ def list_calls(
 		raise frappe.PermissionError("Only managers can see the team's calls.")
 	kind = choice(filter, CALL_FILTERS, "filter", default="all")
 	offset, limit = page_args(cursor, page_size)
+	if kind == "not_reached":
+		result = _not_reached(me if scope == "mine" else None, query, offset, limit)
+		if not offset:
+			result["today"] = _today(me if scope == "mine" else None)
+		return result
 
 	filters = []
 	if scope == "mine":
@@ -230,30 +235,117 @@ def list_calls(
 		if len(digits) >= 3:
 			or_filters.append(["phone", "like", f"%{digits}%"])
 
-	rows = frappe.get_all(
-		"Mobile Call Log",
-		filters=filters,
-		or_filters=or_filters,
-		fields=[
-			"name",
-			"caller",
-			"call_datetime",
-			"direction",
-			"call_type",
-			"connected",
-			"duration_seconds",
-			"phone",
-			"party_doctype",
-			"party",
-			"party_name",
-			"activity",
-			"recording",
-			"source",
-		],
-		order_by="call_datetime desc",
-		start=offset,
-		limit=limit + 1,
+	return _page(
+		frappe.get_all(
+			"Mobile Call Log",
+			filters=filters,
+			or_filters=or_filters,
+			fields=LOG_FIELDS,
+			order_by="call_datetime desc",
+			start=offset,
+			limit=limit + 1,
+		),
+		offset,
+		limit,
+		me,
+		scope,
 	)
+
+
+LOG_FIELDS = [
+	"name",
+	"caller",
+	"call_datetime",
+	"direction",
+	"call_type",
+	"connected",
+	"duration_seconds",
+	"phone",
+	"party_doctype",
+	"party",
+	"party_name",
+	"activity",
+	"recording",
+	"source",
+]
+
+
+def _not_reached(user: str | None, query: str | None, offset: int, limit: int) -> dict:
+	"""Numbers called but never reached yet (no connected call by anyone): one row per number,
+	newest attempt first. A number leaves the list as soon as any call to / from it connects."""
+	cond, args = "", {}
+	if user:
+		cond += " and l.caller = %(user)s"
+		args["user"] = user
+	q = (query or "").strip()
+	if q:
+		digits = "".join(ch for ch in q if ch.isdigit())
+		cond += " and (l.party_name like %(q)s" + (" or l.phone like %(d)s)" if len(digits) >= 3 else ")")
+		args.update(q=f"%{q}%", d=f"%{digits}%")
+	rows = frappe.db.sql(
+		f"""select l.phone, count(*) attempts, min(l.call_datetime) first_at, max(l.call_datetime) last_at
+		from `tabMobile Call Log` l
+		where l.direction = 'Outgoing' {cond}
+		and not exists (select 1 from `tabMobile Call Log` c where c.phone = l.phone and c.connected = 1)
+		group by l.phone
+		order by last_at desc
+		limit %(limit)s offset %(offset)s""",
+		{**args, "limit": limit + 1, "offset": offset},
+		as_dict=True,
+	)
+	items = []
+	for r in rows[:limit]:
+		last = frappe.get_all(
+			"Mobile Call Log",
+			filters={"phone": r.phone, "direction": "Outgoing", **({"caller": user} if user else {})},
+			fields=LOG_FIELDS,
+			order_by="call_datetime desc",
+			limit=1,
+		)
+		if not last:
+			continue
+		item = _item(last[0], {}, {})
+		item["attempts"] = cint(r.attempts)
+		item["first_at"] = timeutil.to_iso(r.first_at)
+		items.append(item)
+	from hipersign_mobile.api._common import page_result
+
+	return page_result(items, offset, limit, len(rows) > limit)
+
+
+def _item(r, names: dict, recs: dict) -> dict:
+	if r.caller not in names:
+		names[r.caller] = frappe.utils.get_fullname(r.caller)
+	audio = recs.get(r.recording)
+	return {
+		"id": r.name,
+		"at": timeutil.to_iso(r.call_datetime),
+		"direction": r.direction,
+		"call_type": r.call_type,
+		"connected": bool(cint(r.connected)),
+		"duration": cint(r.duration_seconds),
+		"phone": r.phone,
+		"party": {
+			"kind": KINDS.get(r.party_doctype, r.party_doctype),
+			"doctype": r.party_doctype,
+			"id": r.party,
+			"name": r.party_name or r.party,
+		}
+		if r.party
+		else None,
+		"caller": r.caller,
+		"caller_name": names[r.caller],
+		"activity_id": str(r.activity) if r.activity else None,
+		"recording": {"id": r.recording, "ext": (audio or "").rsplit(".", 1)[-1].lower() or None}
+		if r.recording and audio
+		else None,
+		"via_app": r.source == "Hipersign",
+	}
+
+
+def _page(rows, offset, limit, me, scope) -> dict:
+	from hipersign_mobile.api._common import page_result
+
 	recs = {
 		r.name: r.audio_file
 		for r in frappe.get_all(
@@ -262,38 +354,8 @@ def list_calls(
 			fields=["name", "audio_file"],
 		)
 	}
-	names = {}
-	items = []
-	for r in rows[:limit]:
-		if r.caller not in names:
-			names[r.caller] = frappe.utils.get_fullname(r.caller)
-		audio = recs.get(r.recording)
-		items.append(
-			{
-				"id": r.name,
-				"at": timeutil.to_iso(r.call_datetime),
-				"direction": r.direction,
-				"call_type": r.call_type,
-				"connected": bool(cint(r.connected)),
-				"duration": cint(r.duration_seconds),
-				"phone": r.phone,
-				"party": {
-					"kind": KINDS.get(r.party_doctype, r.party_doctype),
-					"doctype": r.party_doctype,
-					"id": r.party,
-					"name": r.party_name or r.party,
-				}
-				if r.party
-				else None,
-				"caller": r.caller,
-				"caller_name": names[r.caller],
-				"activity_id": str(r.activity) if r.activity else None,
-				"recording": {"id": r.recording, "ext": (audio or "").rsplit(".", 1)[-1].lower() or None}
-				if r.recording and audio
-				else None,
-				"via_app": r.source == "Hipersign",
-			}
-		)
+	names: dict = {}
+	items = [_item(r, names, recs) for r in rows[:limit]]
 	result = page_result(items, offset, limit, len(rows) > limit)
 	if not offset:
 		result["today"] = _today(me if scope == "mine" else None)

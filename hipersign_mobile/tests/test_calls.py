@@ -137,3 +137,15 @@ class TestCalls(TestCase):
 		self.assertFalse(call(calls.list_calls, self.caller, scope="team")["success"])
 		team = call(calls.list_calls, self.manager, scope="team")["data"]["items"]
 		self.assertEqual({i["caller"] for i in team if i["phone"] == E164}, {self.caller, self.other})
+
+	def test_not_reached_list(self):
+		self._sync(self.caller, [_call(f"{self.p}n1", 30, 0), _call(f"{self.p}n2", 20, 0)])
+		r = call(calls.list_calls, self.caller, filter="not_reached")
+		self.assertTrue(r["success"], r)
+		row = [i for i in r["data"]["items"] if i["phone"] == E164]
+		self.assertEqual(len(row), 1)  # one row per number
+		self.assertEqual(row[0]["attempts"], 2)
+		# once anyone reaches the number it leaves the list
+		self._sync(self.other, [_call(f"{self.p}n3", 10, 50)])
+		r = call(calls.list_calls, self.caller, filter="not_reached")
+		self.assertEqual([i for i in r["data"]["items"] if i["phone"] == E164], [])
