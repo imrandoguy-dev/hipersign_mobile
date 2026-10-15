@@ -69,6 +69,22 @@ class TestTrialPeriod(TestCase):
 		lst = call(trials.list_bookings, self.sales, status="Active")["data"]["items"]
 		self.assertEqual(sum(1 for b in lst if (b.get("trial") or {}).get("series") == t["series"]), 1)
 
+		# change one session's time: the 14:30 session moves to Tuesday 11:30, numbers follow time order
+		second = next(s for s in t2["sessions"] if s["start"][11:16] == "14:30")
+		r4 = call(trials.reschedule_booking, self.sales, booking_id=second["id"],
+				  new_slot_id=self._slot(mon + dt.timedelta(days=1), "11:30"))
+		self.assertTrue(r4["success"], r4)
+		s4 = r4["data"]["booking"]["trial"]["sessions"]
+		self.assertEqual([(s["start"][:10], s["start"][11:16], s["session_no"]) for s in s4],
+						 [(str(mon), "10:30", 1), (str(mon + dt.timedelta(days=1)), "11:30", 2)])
+
+		# another trial for the same customer: the list still shows the customer once
+		r5 = call(trials.book_trial, self.sales, trainer_slot=self._slot(mon + dt.timedelta(days=7)),
+				  customer=self.customer, booking_type="ERP Trial", trial_days=1, idempotency_key="trial-again")
+		self.assertTrue(r5["success"], r5)
+		lst = call(trials.list_bookings, self.sales, status="Active")["data"]["items"]
+		self.assertEqual(sum(1 for b in lst if b.get("customer") == self.customer), 1)
+
 		# change the length to 5 days (Mon..Fri)
 		r3 = call(trials.set_trial_days, self.sales, booking_id=t["series"], days=5)
 		self.assertEqual(r3["data"]["booking"]["trial"]["end_date"], str(mon + dt.timedelta(days=4)))

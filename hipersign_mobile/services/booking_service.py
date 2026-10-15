@@ -239,6 +239,8 @@ def reschedule(user: str, booking_id: str, new_slot: str, reason: str | None = N
 	frappe.db.set_value("Trainer Slot", old_slot, "status", "Available")
 	frappe.db.set_value("Trainer Slot", slot.name, "status", "Reserved")
 	_sync_task(booking, reason=reason)
+	if booking.get("trial_series"):
+		_renumber(booking.trial_series)  # sessions stay numbered in time order
 
 	from hipersign_mobile.notifications.events import on_trial_event
 
