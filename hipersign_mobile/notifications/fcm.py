@@ -18,7 +18,7 @@ import requests
 
 SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 TOKEN_CACHE_KEY = "hipersign_mobile:fcm_access_token"
-ANDROID_CHANNEL_ID = "hipersign_alerts"
+ANDROID_CHANNEL_ID = "hipersign_reminders"  # created by the app (sound + vibration)
 
 
 @dataclass
