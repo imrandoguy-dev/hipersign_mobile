@@ -9,8 +9,10 @@ would not be enough, because different slots of the same trainer can overlap.
 
 from __future__ import annotations
 
+import datetime as dt
+
 import frappe
-from frappe.utils import get_datetime
+from frappe.utils import cint, get_datetime, getdate
 
 from hipersign_mobile.services import permissions as perms
 from hipersign_mobile.services import timeutil, trainer_hours
@@ -95,7 +97,10 @@ def book(
 	booking_type="ERP Trial",
 	notes=None,
 	idempotency_key=None,
+	series: dict | None = None,
 ):
+	"""series: trial period fields for multi-day trials (trial_series, session_no, trial_days,
+	trial_start_date, trial_end_date)."""
 	perms.require("trial_booking", user)
 	if booking_type not in BOOKING_TYPES:
 		raise frappe.ValidationError("Invalid booking type.")
@@ -130,10 +135,23 @@ def book(
 			"booked_by": user,
 			"notes": notes,
 			"idempotency_key": key,
+			**(series or {}),
 		}
 	)
 	booking.flags.hm_service = True
 	booking.insert(ignore_permissions=True)
+	if not booking.get("trial_series"):
+		start_day = get_datetime(slot.start_datetime).date()
+		booking.db_set(
+			{
+				"trial_series": booking.name,
+				"session_no": 1,
+				"trial_days": booking.get("trial_days") or 1,
+				"trial_start_date": start_day,
+				"trial_end_date": start_day + dt.timedelta(days=(booking.get("trial_days") or 1) - 1),
+			},
+			update_modified=False,
+		)
 	frappe.db.set_value("Trainer Slot", slot.name, "status", "Reserved")
 
 	# One calendar activity for the booking (never two records for one appointment).
@@ -241,6 +259,8 @@ def cancel(user: str, booking_id: str, reason: str | None = None):
 	if frappe.db.get_value("Trainer Slot", booking.trainer_slot, "status") == "Reserved":
 		frappe.db.set_value("Trainer Slot", booking.trainer_slot, "status", "Available")
 	_sync_task(booking, status="Canceled", reason=reason)
+	if booking.get("trial_series"):
+		_renumber(booking.trial_series)
 
 	from hipersign_mobile.notifications.events import on_trial_event
 
@@ -363,6 +383,7 @@ def serialize(b) -> dict:
 		"cancellation_reason": b.cancellation_reason,
 		"completion_notes": b.completion_notes,
 		"modified": timeutil.to_iso(b.modified),
+		"trial": trial_info(b),
 	}
 
 
@@ -372,3 +393,191 @@ def expire_past_slots():
 		where status='Available' and end_datetime < %s""",
 		timeutil.now_system(),
 	)
+
+
+# ---------------------------------------------------------------- multi-day trials
+
+
+def series_sessions(series: str) -> list:
+	return frappe.get_all(
+		"Trial Booking",
+		filters={"trial_series": series},
+		fields=["name", "status", "start_datetime", "end_datetime", "session_no", "trainer"],
+		order_by="start_datetime asc",
+	)
+
+
+def trial_info(b, today: dt.date | None = None) -> dict | None:
+	"""Countdown of a trial period (calendar days): day N of D, days left, sessions."""
+	series = b.get("trial_series")
+	days = cint(b.get("trial_days")) or 1
+	if not series:
+		return None
+	start = (
+		getdate(b.trial_start_date) if b.get("trial_start_date") else get_datetime(b.start_datetime).date()
+	)
+	end = getdate(b.trial_end_date) if b.get("trial_end_date") else start + dt.timedelta(days=days - 1)
+	today = today or dt.datetime.now(timeutil.user_tz()).date()
+	if today < start:
+		phase, day_no, left = "upcoming", 0, (end - today).days + 1
+	elif today > end:
+		phase, day_no, left = "ended", days, 0
+	else:
+		phase, day_no, left = "running", (today - start).days + 1, (end - today).days
+	sessions = series_sessions(series)
+	return {
+		"series": series,
+		"days": days,
+		"start_date": str(start),
+		"end_date": str(end),
+		"phase": phase,  # upcoming | running | ended
+		"day_no": day_no,
+		"days_left": left,
+		"starts_in": (start - today).days if phase == "upcoming" else 0,
+		"sessions": [
+			{
+				"id": x.name,
+				"status": x.status,
+				"session_no": cint(x.session_no) or None,
+				"start": timeutil.to_iso(x.start_datetime),
+				"end": timeutil.to_iso(x.end_datetime),
+			}
+			for x in sessions
+		],
+		"sessions_done": sum(1 for x in sessions if x.status == "Completed"),
+		"sessions_active": sum(1 for x in sessions if x.status in ACTIVE_BOOKING_STATUSES),
+	}
+
+
+def _same_time_on(day: dt.date, first_start: dt.datetime, trainer: str, booking_type: str):
+	"""The free slot id for the same time on `day`, or (None, reason)."""
+	from hipersign_mobile.services import trainer_hours
+
+	when = dt.datetime.combine(day, first_start.time())
+	windows = trainer_hours.working_windows(trainer, day, day)
+	if day not in windows:
+		return None, "Trainer's day off"
+	free = available_slots(
+		dt.datetime.combine(day, dt.time.min),
+		dt.datetime.combine(day, dt.time.max),
+		trainer=trainer,
+		booking_type=booking_type,
+	)
+	for f in free:
+		if get_datetime(timeutil.parse_client_datetime(f["start"])) == when:
+			return f["id"], None
+	return None, "Trainer is busy at this time"
+
+
+def book_series(user: str, *, trial_days: int, trainer_slot: str, idempotency_key=None, **kw):
+	"""Book a trial of `trial_days` calendar days: the chosen first session, then the same time
+	with the same trainer on each following day she works. Days she's off are skipped; days
+	she's busy are returned so another time can be picked for them."""
+	trial_days = max(1, min(cint(trial_days), 60))
+	first, created = book(user, trainer_slot=trainer_slot, idempotency_key=idempotency_key, **kw)
+	start_day = get_datetime(first.start_datetime).date()
+	end_day = start_day + dt.timedelta(days=trial_days - 1)
+	first.db_set(
+		{
+			"trial_series": first.name,
+			"session_no": 1,
+			"trial_days": trial_days,
+			"trial_start_date": start_day,
+			"trial_end_date": end_day,
+		},
+		update_modified=False,
+	)
+	skipped = []
+	if created and trial_days > 1:
+		first_start = get_datetime(first.start_datetime)
+		day = start_day + dt.timedelta(days=1)
+		while day <= end_day:
+			slot_id, reason = _same_time_on(day, first_start, first.trainer, first.booking_type)
+			if slot_id:
+				frappe.db.savepoint("hm_trial_day")
+				try:
+					book(
+						user,
+						trainer_slot=slot_id,
+						idempotency_key=f"{idempotency_key}:{day}" if idempotency_key else None,
+						series=_series_fields(first),
+						**kw,
+					)
+				except (ConflictError, frappe.ValidationError) as exc:
+					frappe.db.rollback(save_point="hm_trial_day")
+					frappe.local.message_log = []
+					skipped.append({"date": str(day), "reason": str(exc) or "Not available"})
+			elif reason != "Trainer's day off":
+				skipped.append({"date": str(day), "reason": reason})
+			day += dt.timedelta(days=1)
+		_renumber(first.name)
+	first.reload()
+	return first, created, skipped
+
+
+def _series_fields(first) -> dict:
+	return {
+		"trial_series": first.trial_series or first.name,
+		"trial_days": first.trial_days,
+		"trial_start_date": first.trial_start_date,
+		"trial_end_date": first.trial_end_date,
+	}
+
+
+def _renumber(series: str):
+	n = 0
+	for x in series_sessions(series):
+		if x.status != "Cancelled":
+			n += 1
+		frappe.db.set_value(
+			"Trial Booking",
+			x.name,
+			"session_no",
+			n if x.status != "Cancelled" else 0,
+			update_modified=False,
+		)
+
+
+def add_session(user: str, booking_id: str, trainer_slot: str, idempotency_key=None):
+	"""One more session in an existing trial (e.g. a day the trainer was busy)."""
+	first = _get_booking_for(user, booking_id)
+	series = first.trial_series or first.name
+	head = frappe.get_doc("Trial Booking", series) if frappe.db.exists("Trial Booking", series) else first
+	booking, created = book(
+		user,
+		customer=head.customer,
+		lead=head.lead if not head.customer else None,
+		trainer_slot=trainer_slot,
+		booking_type=head.booking_type,
+		notes=head.notes,
+		idempotency_key=idempotency_key,
+		series=_series_fields(head),
+	)
+	_renumber(series)
+	booking.reload()
+	return booking, created
+
+
+def set_trial_days(user: str, booking_id: str, days: int):
+	"""Change the trial length (calendar days) for every session of the trial."""
+	b = _get_booking_for(user, booking_id)
+	days = cint(days)
+	if days < 1 or days > 60:
+		raise frappe.ValidationError("Trial length must be between 1 and 60 days.")
+	series = b.trial_series or b.name
+	start = (
+		getdate(b.trial_start_date)
+		if b.trial_start_date
+		else get_datetime(
+			frappe.db.get_value("Trial Booking", series, "start_datetime") or b.start_datetime
+		).date()
+	)
+	end = start + dt.timedelta(days=days - 1)
+	names = [x.name for x in series_sessions(series)] or [b.name]
+	for name in names:
+		frappe.db.set_value(
+			"Trial Booking",
+			name,
+			{"trial_series": series, "trial_days": days, "trial_start_date": start, "trial_end_date": end},
+		)
+	return frappe.get_doc("Trial Booking", b.name)

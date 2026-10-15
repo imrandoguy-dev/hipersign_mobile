@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 
 import frappe
+from frappe.utils import cint
 
 from hipersign_mobile.api._common import (
 	choice,
@@ -139,13 +140,16 @@ def book_trial(
 	booking_type: str | None = None,
 	notes: str | None = None,
 	idempotency_key: str | None = None,
+	trial_days: str | int | None = None,
 ):
 	me = frappe.session.user
 	limit_per_user("book_trial", 30, 60)
 	booking_type = choice(booking_type, svc.BOOKING_TYPES, "booking_type", default="ERP Trial")
+	skipped = []
 	try:
-		booking, created = svc.book(
+		booking, created, skipped = svc.book_series(
 			me,
+			trial_days=cint(trial_days) or 1,
 			customer=customer,
 			lead=lead,
 			trainer_slot=trainer_slot,
@@ -158,7 +162,25 @@ def book_trial(
 		frappe.db.rollback()
 		alternatives = _alternatives(trainer_slot, booking_type)
 		raise svc.ConflictError(f"{exc} {_alt_hint(alternatives)}".strip())
+	# skipped: days of the trial with no session (trainer busy) - book them with add_session.
+	return {"created": created, "booking": svc.serialize(booking), "skipped": skipped}
+
+
+@mobile_api(methods=("POST",))
+def add_trial_session(booking_id: str, trainer_slot: str, idempotency_key: str | None = None):
+	"""Add a session to an existing trial (a day the trainer was busy, or an extra day)."""
+	me = frappe.session.user
+	perms.require("trial_booking", me)
+	booking, created = svc.add_session(me, booking_id, trainer_slot, idempotency_key)
 	return {"created": created, "booking": svc.serialize(booking)}
+
+
+@mobile_api(methods=("POST",))
+def set_trial_days(booking_id: str, days: str | int):
+	"""Change how many days the trial runs (for all its sessions)."""
+	me = frappe.session.user
+	perms.require("trial_booking", me)
+	return {"booking": svc.serialize(svc.set_trial_days(me, booking_id, days))}
 
 
 def _alternatives(slot_name, booking_type):

@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 0,
  "autoname": "TB-.YYYY.-.#####",
- "creation": "2026-10-12 12:00:00.000000",
+ "creation": "2026-10-15 08:30:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -18,6 +18,13 @@
   "end_datetime",
   "booked_by",
   "crm_task",
+  "trial_section",
+  "trial_series",
+  "session_no",
+  "trial_days",
+  "column_break_2",
+  "trial_start_date",
+  "trial_end_date",
   "notes_section",
   "notes",
   "cancellation_reason",
@@ -114,6 +121,46 @@
    "read_only": 1
   },
   {
+   "fieldname": "trial_section",
+   "fieldtype": "Section Break",
+   "label": "Trial Period"
+  },
+  {
+   "description": "All sessions of one trial share this (the first session's booking).",
+   "fieldname": "trial_series",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Trial",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "session_no",
+   "fieldtype": "Int",
+   "label": "Session No",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "trial_days",
+   "fieldtype": "Int",
+   "label": "Trial Length (Days)"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "trial_start_date",
+   "fieldtype": "Date",
+   "label": "Trial Starts"
+  },
+  {
+   "fieldname": "trial_end_date",
+   "fieldtype": "Date",
+   "label": "Trial Ends"
+  },
+  {
    "fieldname": "notes_section",
    "fieldtype": "Section Break",
    "label": "Notes"
@@ -147,7 +194,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-12 12:00:00.000000",
+ "modified": "2026-10-15 08:30:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Trial Booking",

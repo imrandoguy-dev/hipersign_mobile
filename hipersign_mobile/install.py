@@ -187,6 +187,7 @@ def setup():
 	add_indexes()
 	add_whatsapp_template_field()
 	add_shift_break_fields()
+	backfill_trial_periods()
 	backfill_lead_addresses()
 	apply_new_setting_defaults()
 	frappe.clear_cache(doctype="CRM Task")
@@ -243,6 +244,16 @@ def backfill_lead_addresses():
 		text = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
 		if text and not text.startswith("Open in Google Maps"):
 			frappe.db.set_value("CRM Lead", r.reference_name, "hm_address", text[:500], update_modified=False)
+
+
+def backfill_trial_periods():
+	"""Bookings made before trial periods existed: each one is a 1-day trial."""
+	frappe.db.sql(
+		"""update `tabTrial Booking`
+		set trial_series = name, session_no = 1, trial_days = 1,
+			trial_start_date = date(start_datetime), trial_end_date = date(start_datetime)
+		where ifnull(trial_series, '') = '' and start_datetime is not null"""
+	)
 
 
 def add_shift_break_fields():
