@@ -196,6 +196,9 @@ def setup():
 	from hipersign_mobile.services import whatsapp_chat
 
 	whatsapp_chat.backfill_chats()  # chat list for messages received before this version
+	from hipersign_mobile.api.calls import backfill_parties
+
+	backfill_parties()  # calls to numbers that became leads later
 	frappe.clear_cache(doctype="CRM Task")
 	# install-app marks patches as done without running them, so backfill here too (idempotent).
 	from hipersign_mobile.patches.v0_1.set_activity_type_for_existing_tasks import execute as backfill_types

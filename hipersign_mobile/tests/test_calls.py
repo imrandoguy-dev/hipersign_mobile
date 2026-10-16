@@ -149,3 +149,17 @@ class TestCalls(TestCase):
 		self._sync(self.other, [_call(f"{self.p}n3", 10, 50)])
 		r = call(calls.list_calls, self.caller, filter="not_reached")
 		self.assertEqual([i for i in r["data"]["items"] if i["phone"] == E164], [])
+
+	def test_call_shows_the_lead_created_later(self):
+		num = "+91 98950 5" + self.p[:4].translate(str.maketrans("abcdef", "123456"))
+		self._sync(self.caller, [_call(f"{self.p}z", 15, 30, number=num, via_app=True)])
+		row = [i for i in call(calls.list_calls, self.caller)["data"]["items"] if i["phone"].endswith(num[-5:])]
+		self.assertIsNone(row[0]["party"])
+		# lead typed later in Desk without +91
+		digits = "".join(ch for ch in num if ch.isdigit())[2:]
+		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": f"Later {self.p}", "mobile_no": digits, "status": "New"}).insert(ignore_permissions=True)
+		frappe.db.set_value("Mobile Call Log", {"phone": "+91" + digits}, {"party": None, "party_doctype": None, "party_name": None})
+		frappe.db.commit()
+		row = [i for i in call(calls.list_calls, self.caller)["data"]["items"] if i["phone"].endswith(num[-5:])]
+		self.assertEqual(row[0]["party"]["id"], lead.name)
+		self.assertEqual(frappe.db.get_value("Mobile Call Log", {"phone": "+91" + digits}, "party"), lead.name)

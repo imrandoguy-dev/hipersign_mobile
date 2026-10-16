@@ -304,6 +304,7 @@ def _not_reached(user: str | None, query: str | None, offset: int, limit: int) -
 		)
 		if not last:
 			continue
+		fill_parties(last)
 		item = _item(last[0], {}, {})
 		item["attempts"] = cint(r.attempts)
 		item["first_at"] = timeutil.to_iso(r.first_at)
@@ -355,6 +356,7 @@ def _page(rows, offset, limit, me, scope) -> dict:
 		)
 	}
 	names: dict = {}
+	fill_parties(rows[:limit])
 	items = [_item(r, names, recs) for r in rows[:limit]]
 	result = page_result(items, offset, limit, len(rows) > limit)
 	if not offset:
@@ -374,3 +376,39 @@ def _today(user: str | None) -> dict:
 		as_dict=True,
 	)[0]
 	return {k: cint(v) for k, v in r.items()}
+
+
+def fill_parties(rows) -> None:
+	"""Calls saved before the number was in ERPNext (the lead was created afterwards, or typed
+	in a different format): find the customer / lead / deal now, show its name and remember it."""
+	found: dict = {}
+	for r in rows:
+		if r.get("party") or not r.get("phone"):
+			continue
+		if r.phone not in found:
+			hit = _party_for_phone(r.phone)
+			found[r.phone] = hit
+			if hit:
+				name = (party_summary(*hit) or {}).get("name")
+				frappe.db.sql(
+					"""update `tabMobile Call Log` set party_doctype=%s, party=%s, party_name=%s
+					where phone=%s and ifnull(party, '')=''""",
+					(hit[0], hit[1], name, r.phone),
+				)
+				found[r.phone] = (hit[0], hit[1], name)
+		hit = found[r.phone]
+		if hit:
+			r.party_doctype, r.party, r.party_name = hit
+
+
+def backfill_parties():
+	"""After an update: link earlier unknown-number calls whose number is in ERPNext now."""
+	try:
+		phones = frappe.db.sql(
+			"""select distinct phone from `tabMobile Call Log` where ifnull(party, '')='' and ifnull(phone, '')!=''
+			order by phone limit 5000""",
+			pluck=True,
+		)
+		fill_parties([frappe._dict(phone=p, party=None) for p in phones])
+	except Exception:
+		frappe.log_error(title="Hipersign: link earlier calls to leads")
