@@ -69,7 +69,7 @@ def _serialize(row) -> dict:
 		"id": row.name,
 		"party_doctype": row.party_doctype,
 		"party": row.party,
-		"party_name": row.party_name or row.party,
+		"party_name": row.party_name or row.party or row.phone or "Unknown number",
 		"phone": row.phone,
 		"started_at": timeutil.to_iso(row.call_started_at),
 		"duration_seconds": cint(row.duration_seconds),
