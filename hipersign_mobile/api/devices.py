@@ -77,6 +77,7 @@ def get_notification_preferences():
 		"reminder_offsets": list(p.reminder_offsets),
 		"alarm_high_priority": bool(cint(p.alarm_high_priority)),
 		"notify_whatsapp": bool(cint(p.notify_whatsapp)),
+		"notify_development": bool(cint(p.notify_development)),
 	}
 
 
@@ -89,6 +90,7 @@ def update_notification_preferences(
 	reminder_offsets: str | list | None = None,
 	alarm_high_priority: str | int | bool | None = None,
 	notify_whatsapp: str | int | bool | None = None,
+	notify_development: str | int | bool | None = None,
 ):
 	me = frappe.session.user
 	doc = (
@@ -120,6 +122,7 @@ def update_notification_preferences(
 		("notify_reminders", notify_reminders),
 		("notify_trials", notify_trials),
 		("notify_whatsapp", notify_whatsapp),
+		("notify_development", notify_development),
 	):
 		if value is not None:
 			doc.set(field, flag(value))

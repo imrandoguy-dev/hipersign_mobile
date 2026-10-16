@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-15 13:00:00.000000",
+ "creation": "2026-10-16 16:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -48,6 +48,10 @@
   "whatsapp_section",
   "enable_whatsapp_rules",
   "whatsapp_rules",
+  "development_section",
+  "dev_default_reminders",
+  "column_break_dev",
+  "dev_morning_alert_time",
   "whatsapp_chat_section",
   "enable_whatsapp_chat",
   "column_break_wa_chat",
@@ -328,6 +332,29 @@
    "options": "Hipersign WhatsApp Rule"
   },
   {
+   "fieldname": "development_section",
+   "fieldtype": "Section Break",
+   "label": "Development Tasks"
+  },
+  {
+   "default": "1440",
+   "description": "Default for new development tasks, comma separated, e.g. 1440,60 = a day before and an hour before. Each task can have its own.",
+   "fieldname": "dev_default_reminders",
+   "fieldtype": "Data",
+   "label": "Remind Developers Before Deadline (Minutes)"
+  },
+  {
+   "fieldname": "column_break_dev",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "09:30:00",
+   "description": "Every morning at this time, the developer and whoever assigned it are alerted about each development task that is past its deadline and not done.",
+   "fieldname": "dev_morning_alert_time",
+   "fieldtype": "Time",
+   "label": "Daily Overdue Alert At"
+  },
+  {
    "fieldname": "whatsapp_chat_section",
    "fieldtype": "Section Break",
    "label": "WhatsApp Chats In The App"
@@ -355,7 +382,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-15 13:00:00.000000",
+ "modified": "2026-10-16 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",

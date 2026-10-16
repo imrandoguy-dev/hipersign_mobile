@@ -15,7 +15,8 @@ ROLE_SALES = "Hipersign Sales"
 ROLE_MANAGER = "Hipersign Manager"
 ROLE_TRAINER = "Hipersign Trainer"
 ROLE_COLD_CALLER = "Hipersign Cold Caller"
-MOBILE_ROLES = (ROLE_SALES, ROLE_MANAGER, ROLE_TRAINER, ROLE_COLD_CALLER)
+ROLE_DEVELOPER = "Hipersign Developer"
+MOBILE_ROLES = (ROLE_SALES, ROLE_MANAGER, ROLE_TRAINER, ROLE_COLD_CALLER, ROLE_DEVELOPER)
 
 SALES_CAPS = {
 	"calendar",
@@ -26,10 +27,11 @@ SALES_CAPS = {
 	"trial_booking",
 	"call_recordings",
 }
-MANAGER_CAPS = SALES_CAPS | {"team_view", "assign_others", "manage_trainer_slots"}
+MANAGER_CAPS = SALES_CAPS | {"team_view", "assign_others", "manage_trainer_slots", "development", "assign_development"}
 TRAINER_CAPS = {"manage_trainer_slots"}
+DEVELOPER_CAPS = {"development"}
 
-ALL_CAPS = sorted(MANAGER_CAPS | TRAINER_CAPS | {"whatsapp"})
+ALL_CAPS = sorted(MANAGER_CAPS | TRAINER_CAPS | DEVELOPER_CAPS | {"whatsapp"})
 
 
 def user_roles(user: str | None = None) -> set[str]:
@@ -45,6 +47,8 @@ def capabilities(user: str | None = None) -> set[str]:
 		caps |= SALES_CAPS
 	if ROLE_TRAINER in roles:
 		caps |= TRAINER_CAPS
+	if ROLE_DEVELOPER in roles:
+		caps |= DEVELOPER_CAPS
 	if "call_recordings" in caps and not hm_settings.get().enable_call_recordings:
 		caps.discard("call_recordings")
 	if "customers" in caps and whatsapp_chat_on():
@@ -60,6 +64,8 @@ def workspaces(caps: set[str]) -> list[str]:
 	spaces = []
 	if "followups" in caps:
 		spaces.append("sales")
+	if "development" in caps:
+		spaces.append("development")
 	# Future: "cold_caller", "trainer", "hr", "manager"
 	return spaces
 

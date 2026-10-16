@@ -16,6 +16,8 @@ USERS = {
 	"trainer": ("hm.trainer@example.com", [perms.ROLE_TRAINER]),
 	"trainer2": ("hm.trainer2@example.com", [perms.ROLE_TRAINER]),
 	"norole": ("hm.norole@example.com", []),
+	"dev1": ("hm.dev1@example.com", [perms.ROLE_DEVELOPER]),
+	"dev2": ("hm.dev2@example.com", [perms.ROLE_DEVELOPER]),
 }
 
 

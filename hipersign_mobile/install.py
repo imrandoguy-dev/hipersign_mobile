@@ -221,6 +221,8 @@ NEW_SETTING_DEFAULTS = {
 	"lunch_break_end": "14:00:00",
 	"enable_whatsapp_chat": "1",
 	"whatsapp_max_media_mb": "16",
+	"dev_default_reminders": "1440",
+	"dev_morning_alert_time": "09:30:00",
 }
 
 

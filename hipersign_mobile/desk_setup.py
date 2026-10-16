@@ -22,6 +22,7 @@ SHORTCUTS = [
 	("Calling Activity", "Calling Activity", "Report", "Orange"),
 	("Call Recordings", "Call Recording", "DocType", "Purple"),
 	("Trials", "Trial Booking", "DocType", "Cyan"),
+	("Development", "Development Task", "DocType", "Red"),
 	("App Settings", "Hipersign Mobile Settings", "DocType", "Grey"),
 ]
 
@@ -58,6 +59,13 @@ SECTIONS = [
 			("Shift Types", "Shift Type", "DocType", "clock"),
 			("Shift Assignments", "Shift Assignment", "DocType", "calendar-check"),
 			("Holiday Lists", "Holiday List", "DocType", "calendar-x"),
+		],
+	),
+	(
+		"Development",
+		"code",
+		[
+			("Development Tasks", "Development Task", "DocType", "code"),
 		],
 	),
 	(

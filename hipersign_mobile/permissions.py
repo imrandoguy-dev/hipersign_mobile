@@ -88,3 +88,23 @@ def call_log_has_permission(doc, ptype=None, user=None, debug=False):
 	if getattr(doc, "is_new", None) and doc.is_new():
 		return True
 	return doc.get("caller") == user
+
+
+# Development tasks: developers see the ones assigned to them or by them; managers see all.
+def _dev_all(user: str) -> bool:
+	return user == "Administrator" or bool({"System Manager", "Hipersign Manager"} & set(frappe.get_roles(user)))
+
+
+def development_task_query(user: str | None = None, doctype: str | None = None) -> str:
+	user = user or frappe.session.user
+	if _dev_all(user):
+		return ""
+	u = frappe.db.escape(user)
+	return f"(`tabDevelopment Task`.developer = {u} or `tabDevelopment Task`.assigned_by = {u})"
+
+
+def development_task_has_permission(doc, ptype=None, user=None, debug=False):
+	user = user or frappe.session.user
+	if _dev_all(user) or (getattr(doc, "is_new", None) and doc.is_new()):
+		return True
+	return user in (doc.get("developer"), doc.get("assigned_by"))
