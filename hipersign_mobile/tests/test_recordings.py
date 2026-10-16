@@ -27,7 +27,8 @@ class _FakeRequest:
 		self.files = files or {}
 
 
-def _audio(name="Call_9847012345_20261012.m4a", size=2048):
+def _audio(name=None, size=2048):
+	name = name or f"Call_9847012345_{uuid.uuid4().hex[:8]}.m4a"  # phones name each recording uniquely
 	return FileStorage(stream=io.BytesIO(b"\x00\x00\x00\x18ftypM4A " + b"a" * size), filename=name)
 
 
@@ -162,3 +163,22 @@ class TestRecordings(TestCase):
 		finally:
 			_set(enable_call_recordings=1)
 		self.assertIn("call_recordings", perms.capabilities(self.sales1))
+
+	def test_unknown_number_is_saved_and_linked_when_the_lead_appears(self):
+		number = "90" + uuid.uuid4().hex[:0] + str(uuid.uuid4().int)[:8]
+		r = upload(self.sales1, _audio(), party_doctype=None, party=None, phone=number)
+		self.assertTrue(r["success"], r)
+		self.assertIsNone(r["data"]["party"])
+		rec = r["data"]["id"]
+		lead = make_lead(f"HM Rec Later {number}", number)
+		self.assertEqual(frappe.db.get_value("Call Recording", rec, "party"), lead)
+
+	def test_known_number_is_linked_by_the_server(self):
+		r = upload(self.sales1, _audio(), party_doctype=None, party=None, phone="98470 12345")
+		self.assertEqual(r["data"]["party"], "HM Rec Customer")
+
+	def test_same_phone_file_twice_is_saved_once(self):
+		name = f"_919847012345_{uuid.uuid4().hex[:6]}.m4a"
+		a = upload(self.sales1, _audio(name))["data"]["id"]
+		b = upload(self.sales1, _audio(name))["data"]["id"]  # another entry on the phone, new client key
+		self.assertEqual(a, b)

@@ -26,8 +26,13 @@ doc_events = {
 		"on_update": "hipersign_mobile.events.user.on_update",
 	},
 	"CRM Lead": {
-		"after_insert": "hipersign_mobile.services.whatsapp_rules.after_lead_insert",
+		"after_insert": [
+			"hipersign_mobile.services.whatsapp_rules.after_lead_insert",
+			"hipersign_mobile.api.recordings.link_orphans",
+		],
 	},
+	"CRM Deal": {"after_insert": "hipersign_mobile.api.recordings.link_orphans"},
+	"Customer": {"after_insert": "hipersign_mobile.api.recordings.link_orphans"},
 	# Chat list + notifications for WhatsApp chats in the app (only when Frappe WhatsApp is installed).
 	"WhatsApp Message": {
 		"after_insert": "hipersign_mobile.services.whatsapp_chat.on_message_insert",

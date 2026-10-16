@@ -120,9 +120,18 @@ def upload(
 			raise frappe.ValidationError("This recording key is already used.")
 		return _serialize(frappe.get_doc("Call Recording", existing.name))
 
-	party_doctype = choice(party_doctype, perms.PARTY_DOCTYPES, "party_doctype")
-	party = require_str(party, "party")
-	perms.require_party(party_doctype, party, me)
+	cc = hm_settings.get().default_country_code
+	normalized = normalize_phone(phone, cc) if phone else None
+	if party:
+		party_doctype = choice(party_doctype, perms.PARTY_DOCTYPES, "party_doctype")
+		perms.require_party(party_doctype, party, me)
+	else:
+		# Not linked on the phone (e.g. a number that isn't in ERPNext): find it by number,
+		# else keep it unlinked - it is linked when a lead / customer with the number appears.
+		from hipersign_mobile.api.customers import _party_for_phone
+
+		found = _party_for_phone(normalized) if normalized else None
+		party_doctype, party = found if found else (None, None)
 	task = perms.get_task_for(activity, me) if activity not in (None, "", "null") else None
 
 	upload_file = frappe.request.files.get("file") if frappe.request and frappe.request.files else None
@@ -140,8 +149,14 @@ def upload(
 		raise frappe.ValidationError(f"Recording is larger than {hm_settings.get().max_recording_mb} MB.")
 
 	started = timeutil.parse_client_datetime(started_at, me)
-	cc = hm_settings.get().default_country_code
-	normalized = normalize_phone(phone, cc) if phone else None
+	# The same phone file sent twice (two entries on the phone for one call): keep one.
+	same = frappe.db.get_value(
+		"Call Recording",
+		{"recorded_by": me, "source_name": optional_str(original, 140), "file_size": len(content)},
+		"name",
+	)
+	if same:
+		return _serialize(frappe.get_doc("Call Recording", same))
 	doc = frappe.get_doc(
 		{
 			"doctype": "Call Recording",
@@ -158,7 +173,7 @@ def upload(
 		}
 	).insert(ignore_permissions=True)
 
-	safe_party = re.sub(r"[^A-Za-z0-9]+", "-", doc.party_name or party).strip("-")[:40] or "call"
+	safe_party = re.sub(r"[^A-Za-z0-9]+", "-", doc.party_name or party or doc.phone or "").strip("-")[:40] or "call"
 	file_doc = frappe.get_doc(
 		{
 			"doctype": "File",
@@ -171,13 +186,15 @@ def upload(
 		}
 	).insert(ignore_permissions=True)
 	doc.db_set("audio_file", file_doc.file_url, update_modified=False)
-	# Link it to the call in the call log (if that was synced first).
+	# Link it to the call in the call log (if that was synced first): the connected call.
 	frappe.db.sql(
 		"""update `tabMobile Call Log` set recording = %(rec)s
-		where caller = %(user)s and phone = %(phone)s and ifnull(recording, '') = ''
+		where caller = %(user)s and phone = %(phone)s and ifnull(recording, '') = '' and connected = 1
 		and call_datetime between %(when)s - interval 3 minute and %(when)s + interval 3 minute""",
 		{"rec": doc.name, "user": me, "phone": doc.phone, "when": started},
 	)
+	if not party:
+		return _serialize(doc)
 
 	minutes, seconds = divmod(cint(duration), 60)
 	frappe.get_doc(
@@ -250,3 +267,30 @@ def download(name: str | None = None):
 	frappe.local.response.type = "download"
 	frappe.local.response.display_content_as = "inline"
 	frappe.local.response.content_type = AUDIO_TYPES.get(ext, "application/octet-stream")
+
+
+def link_orphans(doc, method=None):
+	"""doc_event (CRM Lead / CRM Deal / Customer after_insert): recordings and calls of this
+	number that were saved before it was in ERPNext now belong to it."""
+	try:
+		from hipersign_mobile.services.party import party_summary
+
+		summary = party_summary(doc.doctype, doc.name) or {}
+		numbers = [p["e164"] for p in summary.get("phones") or [] if p.get("e164")]
+		if not numbers:
+			return
+		for rec in frappe.get_all(
+			"Call Recording",
+			filters={"phone": ["in", numbers], "party": ["in", ["", None]]},
+			pluck="name",
+		):
+			r = frappe.get_doc("Call Recording", rec)
+			r.party_doctype, r.party = doc.doctype, doc.name
+			r.save(ignore_permissions=True)
+		frappe.db.sql(
+			"""update `tabMobile Call Log` set party_doctype = %(dt)s, party = %(name)s, party_name = %(title)s
+			where phone in %(numbers)s and ifnull(party, '') = ''""",
+			{"dt": doc.doctype, "name": doc.name, "title": summary.get("name"), "numbers": tuple(numbers)},
+		)
+	except Exception:
+		frappe.log_error(title="Hipersign: could not link earlier recordings to the new record")
