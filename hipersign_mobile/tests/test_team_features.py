@@ -292,8 +292,8 @@ class TestTeamFeatures(TestCase):
 	# ------------------------------------------------------------ daily report
 
 	def test_daily_report(self):
-		day = dt.date.today()
 		now = timeutil.now_system()
+		day = now.date()
 		done = make_task(self.sales2, now.replace(hour=10, minute=0), title="Call Ravi", ref=("Customer", self.customer))
 		frappe.db.set_value("CRM Task", done.name, "status", "Done")
 		make_task(self.sales2, now.replace(hour=15, minute=0), title="Meet Anu", ref=("Customer", self.customer))

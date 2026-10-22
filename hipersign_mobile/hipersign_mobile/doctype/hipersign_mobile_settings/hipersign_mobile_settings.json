@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-22 22:00:00.000000",
+ "creation": "2026-10-23 00:30:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -57,6 +57,8 @@
   "column_break_tasks",
   "enable_daily_report",
   "daily_report_time",
+  "quotation_section",
+  "quotation_company",
   "whatsapp_chat_section",
   "enable_whatsapp_chat",
   "column_break_wa_chat",
@@ -390,6 +392,18 @@
    "label": "Daily Report At"
   },
   {
+   "fieldname": "quotation_section",
+   "fieldtype": "Section Break",
+   "label": "Quotations From The App"
+  },
+  {
+   "description": "New quotations in the app start with this company (it can still be changed there). Empty = the company the person used last time.",
+   "fieldname": "quotation_company",
+   "fieldtype": "Link",
+   "label": "Default Company For Quotations",
+   "options": "Company"
+  },
+  {
    "fieldname": "whatsapp_chat_section",
    "fieldtype": "Section Break",
    "label": "WhatsApp Chats In The App"
@@ -417,7 +431,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-22 22:00:00.000000",
+ "modified": "2026-10-23 00:30:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",

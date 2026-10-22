@@ -13,6 +13,7 @@ from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 from hipersign_mobile.api._common import choice, mobile_api, optional_str, require_str
 from hipersign_mobile.services import permissions as perms
+from hipersign_mobile.services import settings as hm_settings
 from hipersign_mobile.services import timeutil
 
 PARTY = ("Customer", "CRM Lead", "CRM Deal")
@@ -28,11 +29,18 @@ class _as_admin:
 	"""Run ERPNext's own logic as Administrator (the caller was already checked)."""
 
 	def __enter__(self):
-		self.user = frappe.session.user
+		# frappe.set_user also replaces the login session id and data; keep them, or the
+		# phone's session would end with this request ("session timed out").
+		s = frappe.local.session
+		self.user, self.sid, self.data = s.user, s.sid, s.data
+		self.form_dict = frappe.local.form_dict
 		frappe.set_user("Administrator")
 
 	def __exit__(self, *exc):
 		frappe.set_user(self.user)
+		frappe.local.session.sid = self.sid
+		frappe.local.session.data = self.data
+		frappe.local.form_dict = self.form_dict
 		return False
 
 
@@ -59,7 +67,12 @@ def options():
 	_require(me)
 	last = _last(me)
 	companies = frappe.get_all("Company", fields=["name", "default_currency"], order_by="name asc")
-	default = last.company or frappe.defaults.get_user_default("Company") or frappe.defaults.get_global_default("company")
+	default = (
+		hm_settings.get().get("quotation_company")
+		or last.company
+		or frappe.defaults.get_user_default("Company")
+		or frappe.defaults.get_global_default("company")
+	)
 	if default not in [c.name for c in companies]:
 		default = companies[0].name if companies else None
 	out = []

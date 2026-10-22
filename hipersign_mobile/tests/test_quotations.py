@@ -38,8 +38,15 @@ class TestQuotations(TestCase):
 		r = call(quotations.items, self.sales, query="ERP Pack", company=self.company)
 		self.assertEqual(r["data"]["items"][0]["code"], self.item)
 		self.assertEqual(r["data"]["items"][0]["rate"], 15000)
-		r = call(quotations.create, self.sales, doctype="Customer", name=self.customer, company=self.company,
-				 items=[{"code": self.item, "qty": 2, "rate": 12000}])
+		# The phone's login session must survive (ERPNext steps run as Administrator inside).
+		frappe.set_user(self.sales)
+		frappe.local.session.sid = "phone-session-id"
+		frappe.local.session.data = frappe._dict(keep="me")
+		r = quotations.create(doctype="Customer", name=self.customer, company=self.company,
+							  items=[{"code": self.item, "qty": 2, "rate": 12000}])
+		self.assertEqual((frappe.session.user, frappe.local.session.sid), (self.sales, "phone-session-id"))
+		self.assertEqual(frappe.local.session.data.get("keep"), "me")
+		frappe.set_user("Administrator")
 		self.assertTrue(r["success"], r)
 		q = r["data"]
 		self.assertEqual(q["total"], 24000)

@@ -187,6 +187,7 @@ def setup():
 	add_indexes()
 	add_whatsapp_template_field()
 	add_quotation_lead_field()
+	default_quotation_company()
 	add_shift_break_fields()
 	backfill_trial_periods()
 	move_trials_to_trainers()
@@ -307,6 +308,20 @@ def add_shift_break_fields():
 		},
 		update=True,
 	)
+
+
+def default_quotation_company():
+	"""Quotations start with "Hipersign ERP" when that company exists and nothing is chosen yet."""
+	try:
+		meta = frappe.get_meta("Hipersign Mobile Settings")
+		if not meta.has_field("quotation_company"):
+			return
+		if not frappe.db.get_single_value("Hipersign Mobile Settings", "quotation_company") and frappe.db.exists(
+			"Company", "Hipersign ERP"
+		):
+			frappe.db.set_single_value("Hipersign Mobile Settings", "quotation_company", "Hipersign ERP")
+	except Exception:
+		frappe.log_error(title="Hipersign: default quotation company")
 
 
 def add_quotation_lead_field():
