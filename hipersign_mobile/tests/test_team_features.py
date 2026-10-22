@@ -169,6 +169,11 @@ class TestTeamFeatures(TestCase):
 		b = r["data"]["booking"]
 		self.assertEqual((b["start"][11:16], b["end"][11:16]), ("10:15", "11:30"))
 		frappe.db.commit()
+		from hipersign_mobile.api import customers
+
+		d = call(customers.get_detail, self.sales, doctype="Customer", name=self.customer)["data"]
+		self.assertEqual(d["journey"]["stage"]["label"], "Training booked")
+		self.assertIn("Trainer", d["journey"]["stage"]["detail"])
 		# Overlapping time with the same trainer is refused (check and booking).
 		r = call(trials.check_time, self.sales2, trainer=self.trainer,
 				 start=_iso(dt.datetime.combine(day, dt.time(11, 0))), end=_iso(dt.datetime.combine(day, dt.time(12, 0))))

@@ -170,3 +170,43 @@ def call(fn, _as_user: str, **kwargs) -> dict:
 		frappe.set_user("Administrator")
 	out["_http_status"] = status
 	return out
+
+
+def ensure_company(name: str = "HM Test Co", abbr: str = "HMT") -> str:
+	"""A minimal ERPNext company (test sites skip the setup wizard)."""
+	frappe.set_user("Administrator")
+	if not frappe.db.exists("Warehouse Type", "Transit"):
+		d = frappe.new_doc("Warehouse Type")
+		d.name = "Transit"
+		d.flags.name_set = True
+		d.db_insert()
+	for doctype, key, extra in (
+		("Item Group", "All Item Groups", {"item_group_name": "All Item Groups", "is_group": 1}),
+		("UOM", "Nos", {"uom_name": "Nos"}),
+		("Price List", "Standard Selling", {"price_list_name": "Standard Selling", "currency": "INR", "selling": 1, "enabled": 1}),
+	):
+		if not frappe.db.exists(doctype, key):
+			frappe.get_doc({"doctype": doctype, **extra}).insert(ignore_permissions=True)
+	if not frappe.db.exists("Company", name):
+		frappe.get_doc(
+			{"doctype": "Company", "company_name": name, "abbr": abbr, "default_currency": "INR", "country": "India",
+			 "chart_of_accounts": "Standard"}
+		).insert(ignore_permissions=True)
+	year = dt.date.today().year
+	for y in (year - 1, year, year + 1):
+		if not frappe.db.exists("Fiscal Year", str(y)):
+			frappe.get_doc(
+				{"doctype": "Fiscal Year", "year": str(y), "year_start_date": f"{y}-01-01", "year_end_date": f"{y}-12-31"}
+			).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return name
+
+
+def ensure_item(code: str, rate: float = 0) -> str:
+	if not frappe.db.exists("Item", code):
+		frappe.get_doc(
+			{"doctype": "Item", "item_code": code, "item_name": code, "item_group": "All Item Groups", "stock_uom": "Nos",
+			 "is_stock_item": 0, "is_sales_item": 1, "standard_rate": rate}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
+	return code

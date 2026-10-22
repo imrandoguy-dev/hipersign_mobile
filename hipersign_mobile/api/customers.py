@@ -226,6 +226,13 @@ def _detail(doctype, name, customer_id):
 	)
 	data["activities"] = activities
 	data["next_activity"] = upcoming[0] if upcoming else None
+	try:
+		from hipersign_mobile.services import journey
+
+		data["journey"] = journey.journey(doctype, name)
+	except Exception:
+		frappe.log_error(title=f"Hipersign customer stage: {doctype} {name}")
+		data["journey"] = None
 	return data
 
 

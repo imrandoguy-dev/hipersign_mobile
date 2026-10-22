@@ -186,6 +186,7 @@ def setup():
 	create_custom_fields(CRM_LEAD_FIELDS, update=True)
 	add_indexes()
 	add_whatsapp_template_field()
+	add_quotation_lead_field()
 	add_shift_break_fields()
 	backfill_trial_periods()
 	move_trials_to_trainers()
@@ -302,6 +303,29 @@ def add_shift_break_fields():
 					"label": "Lunch Break To",
 					"insert_after": "hm_break_start",
 				},
+			]
+		},
+		update=True,
+	)
+
+
+def add_quotation_lead_field():
+	"""Quotations to a CRM Lead go to an ERPNext Lead made for it; this links the two."""
+	if not frappe.db.exists("DocType", "Lead"):
+		return
+	create_custom_fields(
+		{
+			"Lead": [
+				{
+					"fieldname": "hm_crm_lead",
+					"fieldtype": "Link",
+					"label": "CRM Lead",
+					"options": "CRM Lead",
+					"insert_after": "lead_name",
+					"read_only": 1,
+					"search_index": 1,
+					"description": "Made by Hipersign for a quotation to this CRM lead.",
+				}
 			]
 		},
 		update=True,

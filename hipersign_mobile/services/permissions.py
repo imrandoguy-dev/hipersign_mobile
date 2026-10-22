@@ -28,6 +28,7 @@ SALES_CAPS = {
 	"create_activity",
 	"trial_booking",
 	"call_recordings",
+	"quotations",
 }
 MANAGER_CAPS = SALES_CAPS | {"team_view", "assign_others", "manage_trainer_slots", "development", "assign_development"}
 TRAINER_CAPS = {"manage_trainer_slots", "calendar"}  # trainings she gives are on her calendar
