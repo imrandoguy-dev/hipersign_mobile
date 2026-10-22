@@ -16,7 +16,9 @@ ROLE_MANAGER = "Hipersign Manager"
 ROLE_TRAINER = "Hipersign Trainer"
 ROLE_COLD_CALLER = "Hipersign Cold Caller"
 ROLE_DEVELOPER = "Hipersign Developer"
-MOBILE_ROLES = (ROLE_SALES, ROLE_MANAGER, ROLE_TRAINER, ROLE_COLD_CALLER, ROLE_DEVELOPER)
+ROLE_CEO = "Hipersign CEO"
+ROLE_HR = "Hipersign HR"
+MOBILE_ROLES = (ROLE_SALES, ROLE_MANAGER, ROLE_TRAINER, ROLE_COLD_CALLER, ROLE_DEVELOPER, ROLE_CEO, ROLE_HR)
 
 SALES_CAPS = {
 	"calendar",
@@ -28,10 +30,17 @@ SALES_CAPS = {
 	"call_recordings",
 }
 MANAGER_CAPS = SALES_CAPS | {"team_view", "assign_others", "manage_trainer_slots", "development", "assign_development"}
-TRAINER_CAPS = {"manage_trainer_slots"}
+TRAINER_CAPS = {"manage_trainer_slots", "calendar"}  # trainings she gives are on her calendar
 DEVELOPER_CAPS = {"development"}
+# Everyone who signs in: their own tasks, today's report, app suggestions, raising a concern.
+EVERYONE_CAPS = {"tasks", "daily_report", "feedback", "concerns"}
+MANAGER_CAPS = MANAGER_CAPS | {"assign_tasks", "concerns_hr", "call_targets"}
+HR_CAPS = {"assign_tasks", "concerns_hr", "team_reports"}
+CEO_CAPS = MANAGER_CAPS | {"concerns_ceo"}
 
-ALL_CAPS = sorted(MANAGER_CAPS | TRAINER_CAPS | DEVELOPER_CAPS | {"whatsapp"})
+ALL_CAPS = sorted(
+	MANAGER_CAPS | TRAINER_CAPS | DEVELOPER_CAPS | EVERYONE_CAPS | HR_CAPS | CEO_CAPS | {"whatsapp", "call_target"}
+)
 
 
 def user_roles(user: str | None = None) -> set[str]:
@@ -39,10 +48,15 @@ def user_roles(user: str | None = None) -> set[str]:
 
 
 def capabilities(user: str | None = None) -> set[str]:
+	user = user or frappe.session.user
 	roles = user_roles(user)
-	caps: set[str] = set()
+	caps: set[str] = set(EVERYONE_CAPS) if user not in (None, "", "Guest") else set()
 	if "System Manager" in roles or ROLE_MANAGER in roles:
 		caps |= MANAGER_CAPS
+	if ROLE_CEO in roles:
+		caps |= CEO_CAPS
+	if ROLE_HR in roles:
+		caps |= HR_CAPS
 	if ROLE_SALES in roles or ROLE_COLD_CALLER in roles:
 		caps |= SALES_CAPS
 	if ROLE_TRAINER in roles:
@@ -51,9 +65,20 @@ def capabilities(user: str | None = None) -> set[str]:
 		caps |= DEVELOPER_CAPS
 	if "call_recordings" in caps and not hm_settings.get().enable_call_recordings:
 		caps.discard("call_recordings")
+	if ROLE_COLD_CALLER in roles or _has_call_target(user):
+		caps.add("call_target")  # daily call target with alerts
+	if "team_view" in caps:
+		caps.add("team_reports")
 	if "customers" in caps and whatsapp_chat_on():
 		caps.add("whatsapp")  # WhatsApp chats with customers (needs the Frappe WhatsApp app)
 	return caps
+
+
+def _has_call_target(user: str) -> bool:
+	try:
+		return bool(frappe.db.exists("Call Target", {"user": user, "enabled": 1}))
+	except Exception:
+		return False  # before the doctype exists (first migrate)
 
 
 def whatsapp_chat_on() -> bool:
@@ -91,7 +116,11 @@ def can_access_task(task: dict | frappe.model.document.Document, user: str | Non
 	caps = capabilities(user) if caps is None else caps
 	if "team_view" in caps:
 		return True
-	return task.get("assigned_to") == user
+	if task.get("assigned_to") == user:
+		return True
+	# The trainer of a trial / training sees it too (it is on her calendar).
+	booking = task.get("hm_trial_booking")
+	return bool(booking and frappe.db.get_value("Trial Booking", booking, "trainer") == user)
 
 
 def get_task_for(task_id, user: str | None = None, for_update: bool = False):

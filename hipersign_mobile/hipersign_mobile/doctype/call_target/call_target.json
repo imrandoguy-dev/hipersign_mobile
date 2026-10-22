@@ -1,0 +1,154 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:user",
+ "creation": "2026-10-22 22:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "user_name",
+  "enabled",
+  "daily_target",
+  "count_connected_only",
+  "column_break_1",
+  "check_times",
+  "idle_minutes",
+  "work_start",
+  "work_end",
+  "working_days",
+  "set_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Caller",
+   "options": "User",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "user_name",
+   "fieldtype": "Data",
+   "label": "Caller Name",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "default": "70",
+   "fieldname": "daily_target",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Calls Per Day",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "count_connected_only",
+   "fieldtype": "Check",
+   "label": "Count Only Connected Calls"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "17:00",
+   "description": "Comma separated times, e.g. 16:30,17:30. At each time the caller gets a big alert with the calls still needed to reach today's target.",
+   "fieldname": "check_times",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Target Alerts At"
+  },
+  {
+   "default": "30",
+   "description": "During working hours: no call for this long and no follow-up / meeting / training going on = an alert. 0 = off.",
+   "fieldname": "idle_minutes",
+   "fieldtype": "Int",
+   "label": "Alert When No Calls For (Minutes)"
+  },
+  {
+   "default": "09:30:00",
+   "fieldname": "work_start",
+   "fieldtype": "Time",
+   "label": "Working From"
+  },
+  {
+   "default": "18:00:00",
+   "fieldname": "work_end",
+   "fieldtype": "Time",
+   "label": "Working Until"
+  },
+  {
+   "default": "Mon,Tue,Wed,Thu,Fri,Sat",
+   "fieldname": "working_days",
+   "fieldtype": "Data",
+   "label": "Working Days"
+  },
+  {
+   "fieldname": "set_by",
+   "fieldtype": "Link",
+   "label": "Set By",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-22 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Call Target",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign CEO",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "user_name"
+}

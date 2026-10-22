@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "creation": "2026-10-16 16:00:00.000000",
+ "creation": "2026-10-22 22:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -52,6 +52,11 @@
   "dev_default_reminders",
   "column_break_dev",
   "dev_morning_alert_time",
+  "tasks_section",
+  "task_teams",
+  "column_break_tasks",
+  "enable_daily_report",
+  "daily_report_time",
   "whatsapp_chat_section",
   "enable_whatsapp_chat",
   "column_break_wa_chat",
@@ -355,6 +360,36 @@
    "label": "Daily Overdue Alert At"
   },
   {
+   "fieldname": "tasks_section",
+   "fieldtype": "Section Break",
+   "label": "Team Tasks & Daily Report"
+  },
+  {
+   "default": "Accounts\nMarketing\nHiring\nSales\nOperations\nOther",
+   "description": "One per line. Shown when assigning a task in the app (accounts, marketing, hiring...). Reminders and overdue alerts work like development tasks.",
+   "fieldname": "task_teams",
+   "fieldtype": "Small Text",
+   "label": "Teams"
+  },
+  {
+   "fieldname": "column_break_tasks",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "At the time below, every employee gets their day's report in the app: work that was due that day (follow-ups, meetings, trials / trainings, tasks, development) - done and not done - and calls made. Managers get everyone's. The report is also saved here as Hipersign Daily Report.",
+   "fieldname": "enable_daily_report",
+   "fieldtype": "Check",
+   "label": "Send Daily Work Report"
+  },
+  {
+   "default": "18:30:00",
+   "depends_on": "enable_daily_report",
+   "fieldname": "daily_report_time",
+   "fieldtype": "Time",
+   "label": "Daily Report At"
+  },
+  {
    "fieldname": "whatsapp_chat_section",
    "fieldtype": "Section Break",
    "label": "WhatsApp Chats In The App"
@@ -382,7 +417,7 @@
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-16 16:00:00.000000",
+ "modified": "2026-10-22 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Mobile Settings",

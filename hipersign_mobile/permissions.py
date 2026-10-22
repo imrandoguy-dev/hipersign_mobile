@@ -108,3 +108,81 @@ def development_task_has_permission(doc, ptype=None, user=None, debug=False):
 	if _dev_all(user) or (getattr(doc, "is_new", None) and doc.is_new()):
 		return True
 	return user in (doc.get("developer"), doc.get("assigned_by"))
+
+
+# ---------------------------------------------------------------- team tasks
+
+
+def _tasks_all(user: str) -> bool:
+	return user == "Administrator" or bool(
+		{"System Manager", "Hipersign Manager", "Hipersign CEO", "Hipersign HR"} & set(frappe.get_roles(user))
+	)
+
+
+def team_task_query(user: str | None = None, doctype: str | None = None) -> str:
+	user = user or frappe.session.user
+	if _tasks_all(user):
+		return ""
+	u = frappe.db.escape(user)
+	return f"(`tabTeam Task`.assigned_to = {u} or `tabTeam Task`.assigned_by = {u})"
+
+
+def team_task_has_permission(doc, ptype=None, user=None, debug=False):
+	user = user or frappe.session.user
+	if _tasks_all(user) or (getattr(doc, "is_new", None) and doc.is_new()):
+		return True
+	return user in (doc.get("assigned_to"), doc.get("assigned_by"))
+
+
+# ---------------------------------------------------------------- concerns (private)
+
+
+def concern_audiences(user: str) -> tuple[str, ...]:
+	"""Which concerns (besides their own) a user may read."""
+	if user == "Administrator":
+		return ("CEO Only", "HR & Managers")
+	roles = set(frappe.get_roles(user))
+	if "Hipersign CEO" in roles:
+		return ("CEO Only", "HR & Managers")
+	if {"Hipersign HR", "Hipersign Manager"} & roles:
+		return ("HR & Managers",)
+	return ()
+
+
+def concern_query(user: str | None = None, doctype: str | None = None) -> str:
+	user = user or frappe.session.user
+	u = frappe.db.escape(user)
+	aud = concern_audiences(user)
+	if len(aud) == 2:
+		return ""
+	if aud:
+		return f"(`tabHipersign Concern`.audience = 'HR & Managers' or `tabHipersign Concern`.raised_by = {u})"
+	return f"(`tabHipersign Concern`.raised_by = {u})"
+
+
+def concern_has_permission(doc, ptype=None, user=None, debug=False):
+	user = user or frappe.session.user
+	if doc.get("raised_by") == user and ptype in (None, "read", "print"):
+		return True
+	return doc.get("audience") in concern_audiences(user)
+
+
+# ---------------------------------------------------------------- daily reports
+
+
+def _reports_all(user: str) -> bool:
+	return user == "Administrator" or bool(
+		{"System Manager", "Hipersign Manager", "Hipersign CEO", "Hipersign HR"} & set(frappe.get_roles(user))
+	)
+
+
+def daily_report_query(user: str | None = None, doctype: str | None = None) -> str:
+	user = user or frappe.session.user
+	if _reports_all(user):
+		return ""
+	return f"(`tabHipersign Daily Report`.user = {frappe.db.escape(user)})"
+
+
+def daily_report_has_permission(doc, ptype=None, user=None, debug=False):
+	user = user or frappe.session.user
+	return _reports_all(user) or doc.get("user") == user

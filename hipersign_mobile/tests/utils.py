@@ -18,6 +18,10 @@ USERS = {
 	"norole": ("hm.norole@example.com", []),
 	"dev1": ("hm.dev1@example.com", [perms.ROLE_DEVELOPER]),
 	"dev2": ("hm.dev2@example.com", [perms.ROLE_DEVELOPER]),
+	"ceo": ("hm.ceo@example.com", [perms.ROLE_CEO]),
+	"hr": ("hm.hr@example.com", [perms.ROLE_HR]),
+	"caller": ("hm.caller@example.com", [perms.ROLE_COLD_CALLER]),
+	"accounts": ("hm.accounts@example.com", ["Employee"]),
 }
 
 

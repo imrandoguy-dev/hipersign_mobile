@@ -1,0 +1,153 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "CON-.#####",
+ "creation": "2026-10-22 22:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "audience",
+  "category",
+  "subject",
+  "status",
+  "column_break_1",
+  "raised_by",
+  "raised_by_name",
+  "details_section",
+  "details",
+  "response",
+  "responded_by"
+ ],
+ "fields": [
+  {
+   "default": "HR & Managers",
+   "description": "CEO Only: only users with the Hipersign CEO role (and the person who raised it). HR & Managers: Hipersign HR, Hipersign Manager and CEO.",
+   "fieldname": "audience",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Who Can See It",
+   "options": "CEO Only\nHR & Managers",
+   "reqd": 1
+  },
+  {
+   "default": "Other",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "About",
+   "options": "Manager\nColleague\nWorkload\nSalary / Payments\nWork Environment\nTools / Equipment\nCustomer\nOther"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Subject",
+   "length": 200,
+   "reqd": 1
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nIn Review\nResolved\nClosed",
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "raised_by",
+   "fieldtype": "Link",
+   "label": "Raised By",
+   "options": "User",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "raised_by_name",
+   "fieldtype": "Data",
+   "label": "Raised By Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Text",
+   "label": "What Happened"
+  },
+  {
+   "description": "The person who raised it sees this in the app.",
+   "fieldname": "response",
+   "fieldtype": "Text",
+   "label": "Response"
+  },
+  {
+   "fieldname": "responded_by",
+   "fieldtype": "Link",
+   "label": "Responded By",
+   "options": "User",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-22 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Hipersign Concern",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign CEO",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign HR",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "subject",
+ "track_changes": 1
+}

@@ -279,30 +279,63 @@ def free_times(
 	return out[:limit]
 
 
+MIN_MINUTES, MAX_MINUTES = 15, 600
+
+
+def _check_exact(trainer: str, start: dt.datetime, end: dt.datetime, minutes: int):
+	from hipersign_mobile.services.errors import ConflictError
+
+	if end <= start:
+		raise frappe.ValidationError("The end time must be after the start time.")
+	if not MIN_MINUTES <= minutes <= MAX_MINUTES:
+		raise frappe.ValidationError("A session must be between 15 minutes and 10 hours.")
+	if start <= timeutil.now_system():
+		raise ConflictError("This time is in the past.")
+	if start.date() != (end - dt.timedelta(minutes=1)).date():
+		raise frappe.ValidationError("The session must start and end on the same day.")
+	if _overlaps(start, end, busy(trainer, start, end)):
+		name = frappe.utils.get_fullname(trainer)
+		raise ConflictError(f"{name} is busy at this time (another trial, training, meeting or follow-up).")
+
+
+def exact_time(trainer: str, start: dt.datetime, end: dt.datetime) -> dict:
+	"""A hand-picked time for a trainer, as a slot the app can book (advisory check)."""
+	start, end = get_datetime(start).replace(second=0, microsecond=0), get_datetime(end).replace(second=0, microsecond=0)
+	minutes = int((end - start).total_seconds() // 60)
+	_check_exact(trainer, start, end, minutes)
+	note = None
+	windows = working_windows(trainer, start.date(), start.date())
+	inside = [w for w in windows.values() if w[0] <= start and end <= w[1]]
+	if not inside:
+		note = "Outside the trainer's working hours"
+	elif inside[0][2] and _overlaps(start, end, [inside[0][2]]):
+		note = "During the trainer's lunch break"
+	return {
+		"id": slot_id(trainer, start, minutes),
+		"trainer": trainer,
+		"trainer_name": frappe.utils.get_fullname(trainer),
+		"slot_type": "Both",
+		"start": timeutil.to_iso(start),
+		"end": timeutil.to_iso(end),
+		"location": None,
+		"meeting_link": None,
+		"note": note,
+	}
+
+
 def materialize(value: str) -> str:
 	"""Turn an automatic time into a real Trainer Slot (called while booking). Returns its name."""
 	from hipersign_mobile.services.booking_service import lock_trainer
 	from hipersign_mobile.services.errors import ConflictError
 
-	cfg = config()
+	# Any exact time (picked from the free list or typed by hand) can be booked, as long as
+	# the trainer is free then; working hours only shape the suggestions.
 	trainer, start, minutes = parse_id(value)
 	end = start + dt.timedelta(minutes=minutes)
-	if not cfg.enabled:
-		raise frappe.ValidationError("Automatic trainer times are switched off. Pick a published slot.")
 	if trainer not in trainers():
 		raise ConflictError("This trainer is no longer available.")
-	if start <= timeutil.now_system():
-		raise ConflictError("This time is in the past.")
-	windows = working_windows(trainer, start.date() - dt.timedelta(days=1), start.date(), cfg)
-	inside = [w for w in windows.values() if w[0] <= start and end <= w[1]]
-	if minutes != cfg.minutes or not inside:
-		raise frappe.ValidationError("This time is outside the trainer's shift.")
-	lunch = inside[0][2]
-	if lunch and _overlaps(start, end, [lunch]):
-		raise frappe.ValidationError("This time is during the trainer's lunch break.")
 	lock_trainer(trainer)
-	if _overlaps(start, end, busy(trainer, start, end)):
-		raise ConflictError("The trainer just got busy at this time. Please pick another time.")
+	_check_exact(trainer, start, end, minutes)
 	slot = frappe.get_doc(
 		{
 			"doctype": "Trainer Slot",
@@ -313,7 +346,7 @@ def materialize(value: str) -> str:
 			"start_datetime": start,
 			"end_datetime": end,
 			"duration_minutes": minutes,
-			"notes": "Created automatically from working hours when booked in Hipersign.",
+			"notes": "Exact time booked in Hipersign.",
 		}
 	)
 	slot.flags.hm_auto = True

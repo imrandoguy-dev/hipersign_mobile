@@ -1,4 +1,5 @@
-"""Development tasks: work assigned to developers, with a deadline and alerts.
+"""Development tasks (work given to developers) and team tasks (accounts, marketing, hiring...):
+work assigned to a person with a deadline and alerts. Both kinds share this engine.
 
 Alerts (push to the Hipersign app + the bell / email in ERPNext):
 - when a task is assigned to a developer;
@@ -24,9 +25,68 @@ from hipersign_mobile.services import settings as hm_settings
 from hipersign_mobile.services import timeutil
 
 DOCTYPE = "Development Task"
+TEAM_DOCTYPE = "Team Task"
 OPEN = ("Open", "In Progress", "In Review")
 STATUSES = ("Open", "In Progress", "In Review", "Done", "Cancelled")
 PRIORITIES = ("Low", "Medium", "High", "Urgent")
+
+# kind -> how that doctype is stored
+KINDS = {
+	"dev": frappe._dict(
+		doctype=DOCTYPE, person="developer", person_name="developer_name", event="Development", cap="development",
+		assign_cap="assign_development", noun="Development task",
+	),
+	"team": frappe._dict(
+		doctype=TEAM_DOCTYPE, person="assigned_to", person_name="assigned_to_name", event="Task", cap="tasks",
+		assign_cap="assign_tasks", noun="Task",
+	),
+}
+BY_DOCTYPE = {k.doctype: k for k in KINDS.values()}
+
+
+def kind(name: str | None) -> frappe._dict:
+	return KINDS.get(name or "dev") or KINDS["dev"]
+
+
+def kind_of(doc) -> frappe._dict:
+	return BY_DOCTYPE.get(doc.doctype, KINDS["dev"])
+
+
+def person(doc) -> str | None:
+	return doc.get(kind_of(doc).person)
+
+
+def person_name(doc) -> str:
+	k = kind_of(doc)
+	return doc.get(k.person_name) or frappe.utils.get_fullname(doc.get(k.person)) or ""
+
+
+def teams() -> list[str]:
+	raw = hm_settings.get().get("task_teams") or "Accounts\nMarketing\nHiring\nSales\nOperations\nOther"
+	return [t.strip() for t in str(raw).replace(",", "\n").split("\n") if t.strip()]
+
+
+def validate_doc(doc):
+	"""Shared controller validation for Development Task and Team Task."""
+	from hipersign_mobile.notifications.queue import offsets_text, parse_offsets
+
+	k = kind_of(doc)
+	if not doc.assigned_by:
+		doc.assigned_by = frappe.session.user if frappe.session.user != "Guest" else None
+	if doc.reminders:
+		doc.reminders = offsets_text(parse_offsets(doc.reminders)) or None
+	if doc.get(k.person):
+		doc.set(k.person_name, frappe.utils.get_fullname(doc.get(k.person)))
+	before = doc.get_doc_before_save()
+	if doc.status == "Done":
+		if not doc.completed_on:
+			doc.completed_on = timeutil.now_system()
+	else:
+		doc.completed_on = None
+	if before and str(before.deadline) != str(doc.deadline):
+		doc.deadline_changes = cint(doc.deadline_changes) + 1
+		if get_datetime(doc.deadline) > timeutil.now_system():
+			doc.deadline_crossed = 0
 
 
 # ---------------------------------------------------------------- helpers
@@ -68,7 +128,7 @@ def _sent(doc) -> set:
 
 def _mark(doc, keys: set):
 	keys = sorted(keys)[-300:]
-	frappe.db.set_value(DOCTYPE, doc.name, "alerts_sent", json.dumps(keys), update_modified=False)
+	frappe.db.set_value(doc.doctype, doc.name, "alerts_sent", json.dumps(keys), update_modified=False)
 	doc.alerts_sent = json.dumps(keys)
 
 
@@ -84,11 +144,11 @@ def notify(doc, users, key: str, title: str, body: str):
 		try:
 			queue.enqueue(
 				user,
-				"Development",
+				kind_of(doc).event,
 				title,
 				body,
 				dedup_key=f"dev:{doc.name}:{key}:{user}"[:140],
-				reference_doctype=DOCTYPE,
+				reference_doctype=doc.doctype,
 				reference_name=doc.name,
 			)
 		except Exception:
@@ -101,7 +161,7 @@ def notify(doc, users, key: str, title: str, body: str):
 				users,
 				{
 					"type": "Alert",
-					"document_type": DOCTYPE,
+					"document_type": doc.doctype,
 					"document_name": doc.name,
 					"subject": f"{title}: {body}"[:500],
 					"email_content": body,
@@ -120,22 +180,25 @@ def notify(doc, users, key: str, title: str, body: str):
 
 def on_saved(doc, before=None):
 	me = frappe.session.user
-	if before is None or before.developer != doc.developer:
-		if doc.developer and doc.developer != me and doc.status in OPEN:
+	k = kind_of(doc)
+	who_does = person(doc)
+	noun = "development task" if k.doctype == DOCTYPE else "task"
+	if before is None or before.get(k.person) != who_does:
+		if who_does and who_does != me and doc.status in OPEN:
 			who = frappe.utils.get_fullname(doc.assigned_by or me)
 			notify(
 				doc,
-				[doc.developer],
-				f"assigned:{doc.developer}:{doc.modified}",
-				"New development task",
+				[who_does],
+				f"assigned:{who_does}:{doc.modified}",
+				f"New {noun}",
 				f"{doc.title} - deadline {_when(doc.deadline)} (from {who})",
 			)
 	if before is None:
 		return
 	if before.status != doc.status and doc.status == "Done" and doc.assigned_by and doc.assigned_by != me:
-		notify(doc, [doc.assigned_by], f"done:{doc.modified}", "Development done", f"{doc.title} - by {doc.developer_name or doc.developer}")
+		notify(doc, [doc.assigned_by], f"done:{doc.modified}", "Development done" if k.doctype == DOCTYPE else "Task done", f"{doc.title} - by {person_name(doc)}")
 	if str(before.deadline) != str(doc.deadline) and doc.status in OPEN:
-		others = [u for u in (doc.developer, doc.assigned_by) if u and u != me]
+		others = [u for u in (who_does, doc.assigned_by) if u and u != me]
 		if others:
 			notify(
 				doc,
@@ -152,56 +215,58 @@ def on_saved(doc, before=None):
 def process_alerts(now: dt.datetime | None = None):
 	"""Every minute: reminders before the deadline, deadline crossed, morning overdue alerts."""
 	now = now or timeutil.now_system()
-	if not frappe.db.table_exists(DOCTYPE):
-		return
 	s = hm_settings.get()
 	try:
 		morning = get_time(s.dev_morning_alert_time or "09:30:00")
 	except Exception:
 		morning = dt.time(9, 30)
 	horizon = now + dt.timedelta(days=8)  # reminders at most a week ahead
-	for name in frappe.get_all(
-		DOCTYPE,
-		filters={"status": ["in", OPEN], "deadline": ["<", horizon]},
-		pluck="name",
-		limit=2000,
-	):
-		try:
-			_check(frappe.get_doc(DOCTYPE, name), now, morning)
-		except Exception:
-			frappe.log_error(title=f"Hipersign development alerts: {name}")
+	for k in KINDS.values():
+		if not frappe.db.table_exists(k.doctype):
+			continue
+		for name in frappe.get_all(
+			k.doctype,
+			filters={"status": ["in", OPEN], "deadline": ["<", horizon]},
+			pluck="name",
+			limit=2000,
+		):
+			try:
+				_check(frappe.get_doc(k.doctype, name), now, morning)
+			except Exception:
+				frappe.log_error(title=f"Hipersign task alerts: {name}")
 
 
 def _check(doc, now: dt.datetime, morning: dt.time):
 	deadline = get_datetime(doc.deadline)
 	tag = deadline.strftime("%Y%m%d%H%M")
+	who_does = person(doc)
 	if now < deadline:
 		for minutes in reminder_offsets(doc):
 			at = deadline - dt.timedelta(minutes=minutes)
 			# Only the reminder that is due now (not old ones when a task is created late).
 			if at <= now < at + dt.timedelta(minutes=30):
 				left = _left_text(deadline - now)
-				notify(doc, [doc.developer], f"rem:{tag}:{minutes}", "Deadline coming up", f"{doc.title} - due {_when(deadline)} ({left} left)")
+				notify(doc, [who_does], f"rem:{tag}:{minutes}", "Deadline coming up", f"{doc.title} - due {_when(deadline)} ({left} left)")
 		return
 
 	# Past the deadline and not done.
 	if not cint(doc.deadline_crossed):
-		frappe.db.set_value(DOCTYPE, doc.name, "deadline_crossed", 1, update_modified=False)
+		frappe.db.set_value(doc.doctype, doc.name, "deadline_crossed", 1, update_modified=False)
 	notify(
 		doc,
-		[doc.developer, doc.assigned_by],
+		[who_does, doc.assigned_by],
 		f"crossed:{tag}",
 		"Deadline crossed",
-		f"{doc.title} - was due {_when(deadline)}, still {doc.status.lower()} ({doc.developer_name or doc.developer})",
+		f"{doc.title} - was due {_when(deadline)}, still {doc.status.lower()} ({person_name(doc)})",
 	)
 	today_morning = dt.datetime.combine(now.date(), morning)
 	if now >= today_morning and deadline < today_morning:
 		notify(
 			doc,
-			[doc.developer, doc.assigned_by],
+			[who_does, doc.assigned_by],
 			f"daily:{now.date().isoformat()}",
-			"Development overdue",
-			f"{doc.title} - {_late_text(deadline, now)} (due {_when(deadline)}, {doc.developer_name or doc.developer})",
+			"Overdue" if doc.doctype != DOCTYPE else "Development overdue",
+			f"{doc.title} - {_late_text(deadline, now)} (due {_when(deadline)}, {person_name(doc)})",
 		)
 
 
@@ -225,12 +290,16 @@ def serialize(doc, me: str | None = None) -> dict:
 	now = timeutil.now_system()
 	deadline = get_datetime(doc.deadline) if doc.deadline else None
 	late = bool(deadline and doc.status in OPEN and now > deadline)
+	k = kind_of(doc)
+	who_does = person(doc)
 	return {
 		"id": doc.name,
+		"kind": "team" if k.doctype == TEAM_DOCTYPE else "dev",
 		"title": doc.title,
+		"team": doc.get("team") if k.doctype == TEAM_DOCTYPE else "Development",
 		"description": html_to_text(doc.description) if doc.get("description") else None,
-		"developer": doc.developer,
-		"developer_name": doc.developer_name or frappe.utils.get_fullname(doc.developer),
+		"developer": who_does,
+		"developer_name": person_name(doc),
 		"assigned_by": doc.assigned_by,
 		"assigned_by_name": frappe.utils.get_fullname(doc.assigned_by) if doc.assigned_by else None,
 		"status": doc.status,
@@ -241,17 +310,28 @@ def serialize(doc, me: str | None = None) -> dict:
 		"reminders": reminder_offsets(doc),
 		"own_reminders": bool((doc.get("reminders") or "").strip()),
 		"customer": doc.customer,
-		"project": doc.project_name,
+		"project": doc.get("project_name"),
 		"completed_on": timeutil.to_iso(doc.completed_on),
 		"deadline_changes": cint(doc.deadline_changes),
 		"can_edit": can_edit(doc, me),
-		"is_mine": doc.developer == me,
+		"is_mine": who_does == me,
+		"attachments": attachment_count(doc),
 		"modified": timeutil.to_iso(doc.modified),
 	}
 
 
+def attachment_count(doc) -> int:
+	return frappe.db.count("File", {"attached_to_doctype": doc.doctype, "attached_to_name": doc.name})
+
+
 def can_edit(doc, user: str) -> bool:
-	"""Who may change title / developer / deadline: whoever assigned it, and managers."""
+	"""Who may change title / person / deadline: whoever assigned it, and managers."""
 	from hipersign_mobile.services import permissions as perms
 
-	return "assign_development" in perms.capabilities(user) or doc.assigned_by == user
+	return kind_of(doc).assign_cap in perms.capabilities(user) or doc.assigned_by == user
+
+
+def can_see(doc, user: str) -> bool:
+	from hipersign_mobile.services import permissions as perms
+
+	return kind_of(doc).assign_cap in perms.capabilities(user) or user in (person(doc), doc.assigned_by)

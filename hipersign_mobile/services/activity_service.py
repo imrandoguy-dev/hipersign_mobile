@@ -211,14 +211,57 @@ def list_activities(
 	if end is not None:
 		conditions.append(["due_date", "<", end])
 
+	base = [[k, *(v if isinstance(v, list) else ["=", v])] for k, v in filters.items() if k != "assigned_to"]
+	person = filters["assigned_to"]
 	rows = frappe.get_all(
 		"CRM Task",
-		filters=[[k, *(v if isinstance(v, list) else ["=", v])] for k, v in filters.items()] + conditions,
+		filters=base + [["assigned_to", "=", person]] + conditions,
 		or_filters=filters_or,
 		fields=task_fields(),
 		order_by=order_by,
-		start=offset,
-		page_length=limit + 1,
+		page_length=offset + limit + 1,
+	)
+	# Trials / trainings the person gives as trainer (booked by someone else) are on her
+	# calendar too - same activity record, so both see the same status.
+	trainer_tasks = trainer_task_names(person, start, end)
+	if trainer_tasks:
+		seen = {r.name for r in rows}
+		extra = frappe.get_all(
+			"CRM Task",
+			filters=base + [["name", "in", list(trainer_tasks - seen)]] + conditions,
+			or_filters=filters_or,
+			fields=task_fields(),
+			order_by=order_by,
+			page_length=offset + limit + 1,
+		) if trainer_tasks - seen else []
+		if extra:
+			rows = _sorted(rows + extra, order_by)
+	return rows[offset : offset + limit + 1]
+
+
+def trainer_task_names(user: str, start=None, end=None) -> set:
+	"""Calendar activities of trial bookings where `user` is the trainer."""
+	filters = [["trainer", "=", user], ["crm_task", "is", "set"], ["booked_by", "!=", user]]
+	if start is not None:
+		filters.append(["end_datetime", ">=", start - dt.timedelta(days=1)])
+	if end is not None:
+		filters.append(["start_datetime", "<", end])
+	names = set()
+	for t in frappe.get_all("Trial Booking", filters=filters, pluck="crm_task", limit=1000):
+		try:
+			names.add(int(t))
+		except (TypeError, ValueError):
+			continue
+	return names
+
+
+def _sorted(rows, order_by: str):
+	"""Re-sort merged rows the way the query ordered them (due_date asc/desc, then name)."""
+	desc = "due_date desc" in (order_by or "")
+	far = dt.datetime.max if not desc else dt.datetime.min
+	rows.sort(
+		key=lambda r: (get_datetime(r.due_date) if r.get("due_date") else far, int(r.name)),
+		reverse=desc,
 	)
 	return rows
 

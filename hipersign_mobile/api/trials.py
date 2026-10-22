@@ -29,12 +29,14 @@ def list_bookings(
 	page_size: str | int | None = None,
 ):
 	me = frappe.session.user
-	perms.require("trial_booking", me)
+	if not perms.capabilities(me) & {"trial_booking", "manage_trainer_slots"}:
+		raise frappe.PermissionError("You are not allowed to do this.")  # trainers see the trials they give
 	status = choice(status, STATUSES, "status", default="Active")
 	offset, limit = page_args(cursor, page_size)
 	filters = []
+	mine = None
 	if "team_view" not in perms.capabilities(me):
-		filters.append(["booked_by", "=", me])
+		mine = [["booked_by", "=", me], ["trainer", "=", me]]  # booked by me, or I'm the trainer
 	if status == "Active":
 		filters.append(["status", "in", svc.ACTIVE_BOOKING_STATUSES])
 	elif status != "All":
@@ -69,6 +71,7 @@ def list_bookings(
 	rows = frappe.get_all(
 		"Trial Booking",
 		filters=filters,
+		or_filters=mine,
 		fields=["name", "trial_series", "start_datetime", "customer", "lead"],
 		order_by=order,
 		limit=1000,
@@ -91,6 +94,23 @@ def list_bookings(
 	page = reps[offset : offset + limit + 1]
 	items = [svc.serialize(frappe.get_doc("Trial Booking", r.name)) for r in page[:limit]]
 	return page_result(items, offset, limit, len(page) > limit)
+
+
+@mobile_api(methods=("GET",))
+def check_time(trainer: str | None = None, start: str | None = None, end: str | None = None):
+	"""An exact time chosen by hand (e.g. 10:15 - 11:30) for a trainer. Returns it as a
+	bookable slot when the trainer is free then; the booking re-checks under lock."""
+	from hipersign_mobile.services import trainer_hours
+
+	me = frappe.session.user
+	perms.require("trial_booking", me)
+	if not trainer or trainer not in trainer_hours.trainers():
+		raise frappe.ValidationError("Choose a trainer.")
+	if not start or not end:
+		raise frappe.ValidationError("Choose the start and end time.")
+	s = timeutil.parse_client_datetime(start, me)
+	e = timeutil.parse_client_datetime(end, me)
+	return trainer_hours.exact_time(trainer, s, e)
 
 
 @mobile_api(methods=("GET",))

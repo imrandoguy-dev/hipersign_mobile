@@ -24,6 +24,7 @@ PREF_FIELD = {
 	"Trial Update": "notify_trials",
 	"WhatsApp": "notify_whatsapp",
 	"Development": "notify_development",
+	"Task": "notify_tasks",
 }
 
 
@@ -61,7 +62,7 @@ def get_preferences(user: str) -> frappe._dict:
 	s = hm_settings.get()
 	fields = ["reminder_minutes", "notify_assignments", "notify_reminders", "notify_trials"]
 	meta = frappe.get_meta("Mobile User Preference")
-	fields += [f for f in ("reminder_offsets", "alarm_high_priority", "notify_whatsapp", "notify_development") if meta.has_field(f)]
+	fields += [f for f in ("reminder_offsets", "alarm_high_priority", "notify_whatsapp", "notify_development", "notify_tasks") if meta.has_field(f)]
 	row = frappe.db.get_value("Mobile User Preference", user, fields, as_dict=True)
 	if not row:
 		row = frappe._dict(
@@ -72,6 +73,7 @@ def get_preferences(user: str) -> frappe._dict:
 			alarm_high_priority=1,
 			notify_whatsapp=1,
 			notify_development=1,
+			notify_tasks=1,
 		)
 	row.reminder_minutes = (
 		cint(row.reminder_minutes) if row.reminder_minutes is not None else s.default_reminder_minutes
@@ -85,6 +87,7 @@ def get_preferences(user: str) -> frappe._dict:
 	row.alarm_high_priority = 1 if row.get("alarm_high_priority") is None else cint(row.alarm_high_priority)
 	row.notify_whatsapp = 1 if row.get("notify_whatsapp") is None else cint(row.notify_whatsapp)
 	row.notify_development = 1 if row.get("notify_development") is None else cint(row.notify_development)
+	row.notify_tasks = 1 if row.get("notify_tasks") is None else cint(row.notify_tasks)
 	return row
 
 
@@ -174,7 +177,10 @@ def _still_relevant(n) -> bool:
 
 
 def _rings_like_alarm(n) -> bool:
-	"""Reminders of High priority activities ring like an alarm (unless the person turned it off)."""
+	"""Reminders of High priority activities ring like an alarm (unless the person turned it off).
+	Call target alerts always do (the big "34 calls still needed" alert)."""
+	if n.event_type == "Call Target":
+		return True
 	if n.event_type != "Reminder" or n.reference_doctype != "CRM Task" or not n.reference_name:
 		return False
 	if frappe.db.get_value("CRM Task", n.reference_name, "priority") not in ("High", "Urgent"):
@@ -288,6 +294,16 @@ def route_for(doctype, name) -> str | None:
 		return f"/trial/{name}"
 	if doctype == "Development Task" and name:
 		return f"/dev/{name}"
+	if doctype == "Team Task" and name:
+		return f"/task/{name}"
+	if doctype == "Hipersign Daily Report":
+		return f"/report/{name}" if name else "/report/team"
+	if doctype == "Hipersign Feedback" and name:
+		return f"/feedback/{name}"
+	if doctype == "Hipersign Concern" and name:
+		return f"/concern/{name}"
+	if doctype == "Call Target":
+		return "/target"
 	if doctype == "Hipersign WhatsApp Chat" and name:
 		return f"/whatsapp/{name}"
 	return None

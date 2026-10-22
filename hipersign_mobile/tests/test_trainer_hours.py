@@ -95,8 +95,15 @@ class TestTrainerWorkingHours(TestCase):
 
 	def test_bad_or_outside_hours_id(self):
 		day = _next_weekday()
-		bad = trainer_hours.slot_id(self.trainer, dt.datetime.combine(day, dt.time(20, 0)), 60)
-		r = call(trials.book_trial, self.sales, trainer_slot=bad, customer=self.customer, booking_type="ERP Trial")
+		# An exact time outside the shift can be booked on purpose (e.g. a late training) ...
+		late = trainer_hours.slot_id(self.trainer, dt.datetime.combine(day, dt.time(20, 0)), 75)
+		r = call(trials.book_trial, self.sales, trainer_slot=late, customer=self.customer, booking_type="ERP Trial")
+		self.assertTrue(r["success"], r)
+		# ... but never over another booking, and nonsense ids are refused.
+		clash = trainer_hours.slot_id(self.trainer, dt.datetime.combine(day, dt.time(20, 30)), 30)
+		r = call(trials.book_trial, self.sales, trainer_slot=clash, customer=self.customer, booking_type="ERP Trial")
+		self.assertFalse(r["success"])
+		r = call(trials.book_trial, self.sales, trainer_slot="auto:nonsense", customer=self.customer, booking_type="ERP Trial")
 		self.assertFalse(r["success"])
 
 	def _employee(self, user, holiday_list=None):

@@ -46,12 +46,18 @@ permission_query_conditions = {
 	"Call Recording": "hipersign_mobile.permissions.call_recording_query",
 	"Mobile Call Log": "hipersign_mobile.permissions.call_log_query",
 	"Development Task": "hipersign_mobile.permissions.development_task_query",
+	"Team Task": "hipersign_mobile.permissions.team_task_query",
+	"Hipersign Concern": "hipersign_mobile.permissions.concern_query",
+	"Hipersign Daily Report": "hipersign_mobile.permissions.daily_report_query",
 }
 has_permission = {
 	"CRM Task": "hipersign_mobile.permissions.crm_task_has_permission",
 	"Call Recording": "hipersign_mobile.permissions.call_recording_has_permission",
 	"Mobile Call Log": "hipersign_mobile.permissions.call_log_has_permission",
 	"Development Task": "hipersign_mobile.permissions.development_task_has_permission",
+	"Team Task": "hipersign_mobile.permissions.team_task_has_permission",
+	"Hipersign Concern": "hipersign_mobile.permissions.concern_has_permission",
+	"Hipersign Daily Report": "hipersign_mobile.permissions.daily_report_has_permission",
 }
 
 # Audit history and notification log must survive (and never block) deleting a task.
@@ -64,6 +70,9 @@ scheduler_events = {
 			"hipersign_mobile.notifications.queue.process_due_notifications",
 			# Development tasks: reminders before the deadline, "deadline crossed", morning overdue alerts.
 			"hipersign_mobile.services.development.process_alerts",
+			# Daily work report at the set time; call target alerts (check times, no calls for a while).
+			"hipersign_mobile.services.daily_report.process",
+			"hipersign_mobile.services.call_targets.process",
 		],
 		# Mark trainer slots that ended without a booking as Expired.
 		"*/15 * * * *": ["hipersign_mobile.services.booking_service.expire_past_slots"],

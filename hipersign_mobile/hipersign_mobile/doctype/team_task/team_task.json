@@ -1,0 +1,235 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "TASK-.YYYY.-.#####",
+ "creation": "2026-10-22 22:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "team",
+  "assigned_to",
+  "assigned_to_name",
+  "status",
+  "priority",
+  "column_break_1",
+  "deadline",
+  "reminders",
+  "assigned_by",
+  "customer",
+  "details_section",
+  "description",
+  "result_section",
+  "completed_on",
+  "deadline_crossed",
+  "column_break_2",
+  "deadline_changes",
+  "alerts_sent"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "length": 200,
+   "reqd": 1
+  },
+  {
+   "description": "Accounts, Marketing, Hiring... (list in Hipersign Mobile Settings > Teams).",
+   "fieldname": "team",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Team",
+   "search_index": 1
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Assigned To",
+   "options": "User",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "assigned_to_name",
+   "fieldtype": "Data",
+   "label": "Assigned To Name",
+   "read_only": 1
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nIn Progress\nIn Review\nDone\nCancelled",
+   "search_index": 1
+  },
+  {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Priority",
+   "options": "Low\nMedium\nHigh\nUrgent"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "deadline",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Deadline",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "Comma separated, e.g. 1440,60 = a day before and an hour before. Empty = the default in Hipersign Mobile Settings.",
+   "fieldname": "reminders",
+   "fieldtype": "Data",
+   "label": "Remind Before (Minutes)"
+  },
+  {
+   "fieldname": "assigned_by",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Assigned By",
+   "options": "User"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "What To Do"
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Progress"
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "Completed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deadline_crossed",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Deadline Crossed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "deadline_changes",
+   "fieldtype": "Int",
+   "label": "Deadline Changed (Times)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "alerts_sent",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Alerts Sent",
+   "no_copy": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-22 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Team Task",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign CEO",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign HR",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Employee",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "deadline",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

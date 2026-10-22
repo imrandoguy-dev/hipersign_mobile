@@ -498,6 +498,7 @@ def trial_info(b, today: dt.date | None = None) -> dict | None:
 				"session_no": cint(x.session_no) or None,
 				"start": timeutil.to_iso(x.start_datetime),
 				"end": timeutil.to_iso(x.end_datetime),
+				"trainer": x.trainer,
 			}
 			for x in sessions
 		],

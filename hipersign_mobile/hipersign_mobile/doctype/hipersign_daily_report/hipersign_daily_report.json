@@ -1,0 +1,172 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:DR-{report_date}-{user}",
+ "creation": "2026-10-22 22:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "user_name",
+  "report_date",
+  "column_break_1",
+  "done_count",
+  "not_done_count",
+  "calls_made",
+  "calls_connected",
+  "call_target",
+  "items_section",
+  "items"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee User",
+   "options": "User",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "user_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "report_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "done_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Done",
+   "read_only": 1
+  },
+  {
+   "fieldname": "not_done_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Not Done",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calls_made",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Calls Made",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calls_connected",
+   "fieldtype": "Int",
+   "label": "Calls Connected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "call_target",
+   "fieldtype": "Int",
+   "label": "Call Target",
+   "read_only": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Work"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Work",
+   "options": "Hipersign Daily Report Item",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-22 22:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Hipersign Daily Report",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 0,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign CEO",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign HR",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Employee",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "sort_field": "report_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "user_name"
+}
