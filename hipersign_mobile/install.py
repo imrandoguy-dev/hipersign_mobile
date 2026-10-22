@@ -188,6 +188,7 @@ def setup():
 	add_whatsapp_template_field()
 	add_shift_break_fields()
 	backfill_trial_periods()
+	move_trials_to_trainers()
 	from hipersign_mobile import desk_setup
 
 	desk_setup.setup()  # "Hipersign Mobile" workspace on the computer
@@ -257,6 +258,18 @@ def backfill_lead_addresses():
 		text = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
 		if text and not text.startswith("Open in Google Maps"):
 			frappe.db.set_value("CRM Lead", r.reference_name, "hm_address", text[:500], update_modified=False)
+
+
+def move_trials_to_trainers():
+	"""A trial's calendar activity belongs to the trainer (it used to be the salesperson's)."""
+	try:
+		frappe.db.sql(
+			"""update `tabCRM Task` t join `tabTrial Booking` b on b.name = t.hm_trial_booking
+			set t.assigned_to = b.trainer
+			where b.trainer is not null and b.trainer != '' and t.assigned_to != b.trainer"""
+		)
+	except Exception:
+		frappe.log_error(title="Hipersign: move trials to trainers")
 
 
 def backfill_trial_periods():

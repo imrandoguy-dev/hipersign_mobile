@@ -339,7 +339,7 @@ class TestTrials(Base):
 		self.assertEqual(frappe.db.get_value("Trainer Slot", slot, "status"), "Reserved")
 		task = frappe.get_doc("CRM Task", b["activity_id"])
 		self.assertEqual(task.hm_activity_type, "Trial")
-		self.assertEqual(task.assigned_to, self.s1)
+		self.assertEqual(task.assigned_to, self.trainer)  # on the trainer's calendar
 		self.assertEqual(frappe.db.count("CRM Task", {"hm_trial_booking": b["id"]}), 1)
 		# Trainer notified
 		self.assertTrue(
@@ -348,10 +348,13 @@ class TestTrials(Base):
 				{"recipient": self.trainer, "reference_name": b["id"], "event_type": "Trial Update"},
 			)
 		)
-		# Appears on the salesperson's calendar
+		# On the trainer's calendar, not the salesperson's (she follows it in Trials)
 		day = future(4).date().isoformat()
 		cal = call(calendar.get_my_day, self.s1, start_date=day, end_date=day)
+		self.assertNotIn(b["activity_id"], [a["id"] for a in cal["data"]["items"]])
+		cal = call(calendar.get_my_day, self.trainer, start_date=day, end_date=day)
 		self.assertIn(b["activity_id"], [a["id"] for a in cal["data"]["items"]])
+		self.assertTrue(call(trials.list_bookings, self.s1)["data"]["items"])
 		# Idempotent retry returns the same booking
 		r2 = call(
 			trials.book_trial,

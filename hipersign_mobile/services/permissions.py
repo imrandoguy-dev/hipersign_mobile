@@ -118,9 +118,12 @@ def can_access_task(task: dict | frappe.model.document.Document, user: str | Non
 		return True
 	if task.get("assigned_to") == user:
 		return True
-	# The trainer of a trial / training sees it too (it is on her calendar).
+	# The trial's trainer and the salesperson who booked it can open it too.
 	booking = task.get("hm_trial_booking")
-	return bool(booking and frappe.db.get_value("Trial Booking", booking, "trainer") == user)
+	if not booking:
+		return False
+	b = frappe.db.get_value("Trial Booking", booking, ["trainer", "booked_by"], as_dict=True)
+	return bool(b and user in (b.trainer, b.booked_by))
 
 
 def get_task_for(task_id, user: str | None = None, for_update: bool = False):

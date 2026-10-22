@@ -154,7 +154,8 @@ def book(
 		)
 	frappe.db.set_value("Trainer Slot", slot.name, "status", "Reserved")
 
-	# One calendar activity for the booking (never two records for one appointment).
+	# One calendar activity for the booking (never two records for one appointment). It is on
+	# the trainer's calendar - she gives the training; the salesperson follows it in Trials.
 	trainer_name = frappe.utils.get_fullname(slot.trainer)
 	task = frappe.get_doc(
 		{
@@ -163,7 +164,7 @@ def book(
 			"hm_activity_type": "Trial",
 			"status": "Todo",
 			"priority": "Medium",
-			"assigned_to": user,
+			"assigned_to": slot.trainer,
 			"due_date": slot.start_datetime,
 			"start_date": get_datetime(slot.start_datetime).date(),
 			"hm_end_datetime": slot.end_datetime,
@@ -202,6 +203,7 @@ def _sync_task(booking, status: str | None = None, reason: str | None = None):
 	if not booking.crm_task or not frappe.db.exists("CRM Task", booking.crm_task):
 		return
 	task = frappe.get_doc("CRM Task", booking.crm_task)
+	task.assigned_to = booking.trainer  # moved to another trainer: her calendar now
 	task.due_date = booking.start_datetime
 	task.start_date = get_datetime(booking.start_datetime).date()
 	task.hm_end_datetime = booking.end_datetime

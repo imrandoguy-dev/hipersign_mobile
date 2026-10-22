@@ -29,7 +29,8 @@ def _when(value) -> str:
 
 def on_task_created(doc):
 	actor = frappe.session.user
-	if doc.get("assigned_to") and doc.assigned_to != actor:
+	# Trials: the trainer already gets "New trial booked".
+	if doc.get("assigned_to") and doc.assigned_to != actor and not doc.get("hm_trial_booking"):
 		queue.enqueue(
 			doc.assigned_to,
 			"Assignment",
