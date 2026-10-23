@@ -129,12 +129,20 @@ def progress(user: str, day: dt.date | None = None, t=None) -> dict | None:
 		"meetings": meetings,
 		"meetings_remaining": max(meeting_target - meetings, 0),
 		"last_call": timeutil.to_iso(st.last),
+		"not_reached": _not_reached(user),
+		"new_not_reached_today": _not_reached(user, start, end),
 		"check_times": [x.strftime("%H:%M") for x in parse_times(t.check_times)],
 		"idle_minutes": cint(t.idle_minutes),
 		"work_start": str(t.work_start or "09:30:00")[:5],
 		"work_end": str(t.work_end or "18:00:00")[:5],
 		"working_day": day.weekday() in working_days(t),
 	}
+
+
+def _not_reached(user, since=None, until=None) -> int:
+	from hipersign_mobile.api.calls import not_reached_count
+
+	return not_reached_count(user, since, until, new_only=since is not None)
 
 
 def count_unit(connected_only: bool, new_only: bool) -> str:

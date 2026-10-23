@@ -155,6 +155,9 @@ def build(user: str, day: dt.date) -> dict:
 	st = call_targets.call_stats(user, start, end)
 	made, connected = st.made, st.connected
 	meetings = call_targets.meetings_assigned(user, start, end)
+	from hipersign_mobile.api.calls import not_reached_count
+
+	new_not_reached = not_reached_count(user, start, end, new_only=True)
 	target = call_targets.target_for(user)
 	done = sum(1 for i in items if i["done"])
 	not_done = sum(1 for i in items if i["open"])
@@ -169,6 +172,7 @@ def build(user: str, day: dt.date) -> dict:
 		"calls_made": made,
 		"calls_connected": connected,
 		"new_connected": st.new_connected,
+		"new_not_reached": new_not_reached,
 		"meetings_assigned": meetings,
 		"meeting_target": cint(target.get("meeting_target")) if target else None,
 		"call_target": cint(target.daily_target) if target else None,
@@ -216,7 +220,7 @@ def save(r: dict) -> str:
 def summary_line(r: dict) -> str:
 	parts = [f"{r['done']} done", f"{r['not_done']} not done"]
 	if r["calls_made"] or r["call_target"]:
-		parts.append(f"{r['calls_made']} calls ({r.get('new_connected') or 0} new connected)")
+		parts.append(f"{r['calls_made']} calls ({r.get('new_connected') or 0} new connected, {r.get('new_not_reached') or 0} new not reached)")
 	if r.get("meetings_assigned") or r.get("meeting_target"):
 		parts.append(f"{r.get('meetings_assigned') or 0} meetings assigned" + (f" / {r['meeting_target']}" if r.get("meeting_target") else ""))
 	return " · ".join(parts)

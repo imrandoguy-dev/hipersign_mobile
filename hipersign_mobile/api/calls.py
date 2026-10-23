@@ -163,7 +163,10 @@ def today_summary():
 		(me, start),
 		as_dict=True,
 	)[0]
-	return {k: cint(v) for k, v in r.items()}
+	out = {k: cint(v) for k, v in r.items()}
+	out["not_reached"] = not_reached_count(me)  # all numbers still to call back
+	out["new_not_reached_today"] = not_reached_count(me, since=start, new_only=True)
+	return out
 
 
 @mobile_api(methods=("GET",))
@@ -364,6 +367,32 @@ def _page(rows, offset, limit, me, scope) -> dict:
 	return result
 
 
+def not_reached_count(user: str | None, since=None, until=None, new_only: bool = False) -> int:
+	"""How many numbers were called (by `user`) and never reached - the call-back list.
+	since/until: only numbers first called in that time (e.g. today's new leads)."""
+	cond, args = "", {}
+	if user:
+		cond += " and l.caller = %(user)s"
+		args["user"] = user
+	if new_only:
+		cond += " and coalesce(l.call_type, 'New') = 'New'"
+	having = []
+	if since is not None:
+		having.append("min(l.call_datetime) >= %(since)s")
+		args["since"] = since
+	if until is not None:
+		having.append("min(l.call_datetime) < %(until)s")
+		args["until"] = until
+	r = frappe.db.sql(
+		f"""select count(*) from (select l.phone from `tabMobile Call Log` l
+		where l.direction = 'Outgoing' and coalesce(l.phone, '') != '' {cond}
+		and not exists (select 1 from `tabMobile Call Log` c where c.phone = l.phone and c.connected = 1)
+		group by l.phone {('having ' + ' and '.join(having)) if having else ''}) x""",
+		args,
+	)
+	return cint(r[0][0]) if r else 0
+
+
 def _today(user: str | None) -> dict:
 	start = timeutil.user_today_start(frappe.session.user)
 	cond, args = ("and caller = %(user)s", {"user": user}) if user else ("", {})
@@ -375,7 +404,10 @@ def _today(user: str | None) -> dict:
 		{"start": start, **args},
 		as_dict=True,
 	)[0]
-	return {k: cint(v) for k, v in r.items()}
+	out = {k: cint(v) for k, v in r.items()}
+	out["not_reached"] = not_reached_count(user)  # all numbers still to call back
+	out["new_not_reached_today"] = not_reached_count(user, since=start, new_only=True)
+	return out
 
 
 def fill_parties(rows) -> None:

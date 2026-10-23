@@ -259,7 +259,7 @@ class TestTeamFeatures(TestCase):
 		for i in range(n):
 			frappe.get_doc({
 				"doctype": "Mobile Call Log", "caller": self.caller, "call_datetime": at + dt.timedelta(minutes=i),
-				"direction": "Outgoing", "connected": connected, "duration_seconds": 30, "phone": f"+9190000{i:05d}",
+				"direction": "Outgoing", "connected": connected, "duration_seconds": 30, "phone": f"+91900{connected}{'N' if call_type == 'New' else 'F'}{i:05d}".replace("N", "1").replace("F", "2"),
 				"source": "Hipersign", "sync_key": f"t-{at.isoformat()}-{i}-{call_type}-{connected}", "call_type": call_type,
 			}).insert(ignore_permissions=True)
 
@@ -279,6 +279,8 @@ class TestTeamFeatures(TestCase):
 		p = call_targets.progress(self.caller, day)
 		self.assertEqual((p["made"], p["counted"], p["remaining"], p["unit"]), (9, 3, 2, "new connected calls"))
 		self.assertEqual((p["meetings"], p["meetings_remaining"]), (1, 1))
+		# 2 new numbers not connected that day (the follow-ups / connected ones don't count).
+		self.assertEqual(p["new_not_reached_today"], 2)
 		call_targets.check(frappe.get_doc("Call Target", self.caller), now=dt.datetime.combine(day, dt.time(17, 1)))
 		body = frappe.db.get_value("Mobile Notification", {"recipient": self.caller, "event_type": "Call Target", "title": ["like", "2 more%"]}, "body")
 		self.assertIn("Meetings: 1 of 2", body)
