@@ -191,7 +191,7 @@ def whatsapp_status(doctype: str | None = None, name: str | None = None, since: 
 
 
 KINDS = {"Customer": "Customer", "CRM Lead": "Lead", "CRM Deal": "Deal"}
-CALL_FILTERS = ("all", "not_reached", "connected", "not_connected", "incoming", "missed")
+CALL_FILTERS = ("all", "new_not_reached", "not_reached", "connected", "not_connected", "incoming", "missed")
 
 
 @mobile_api(methods=("GET",))
@@ -213,8 +213,9 @@ def list_calls(
 		raise frappe.PermissionError("Only managers can see the team's calls.")
 	kind = choice(filter, CALL_FILTERS, "filter", default="all")
 	offset, limit = page_args(cursor, page_size)
-	if kind == "not_reached":
-		result = _not_reached(me if scope == "mine" else None, query, offset, limit)
+	if kind in ("not_reached", "new_not_reached"):
+		# new_not_reached: new leads (first calls) that never connected - the call-back list.
+		result = _not_reached(me if scope == "mine" else None, query, offset, limit, new_only=kind == "new_not_reached")
 		if not offset:
 			result["today"] = _today(me if scope == "mine" else None)
 		return result
@@ -273,13 +274,15 @@ LOG_FIELDS = [
 ]
 
 
-def _not_reached(user: str | None, query: str | None, offset: int, limit: int) -> dict:
+def _not_reached(user: str | None, query: str | None, offset: int, limit: int, new_only: bool = False) -> dict:
 	"""Numbers called but never reached yet (no connected call by anyone): one row per number,
 	newest attempt first. A number leaves the list as soon as any call to / from it connects."""
 	cond, args = "", {}
 	if user:
 		cond += " and l.caller = %(user)s"
 		args["user"] = user
+	if new_only:
+		cond += " and coalesce(l.call_type, 'New') = 'New'"
 	q = (query or "").strip()
 	if q:
 		digits = "".join(ch for ch in q if ch.isdigit())
@@ -406,6 +409,7 @@ def _today(user: str | None) -> dict:
 	)[0]
 	out = {k: cint(v) for k, v in r.items()}
 	out["not_reached"] = not_reached_count(user)  # all numbers still to call back
+	out["new_not_reached"] = not_reached_count(user, new_only=True)  # new leads never connected
 	out["new_not_reached_today"] = not_reached_count(user, since=start, new_only=True)
 	return out
 

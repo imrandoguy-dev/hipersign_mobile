@@ -114,7 +114,11 @@ def progress(user: str, day: dt.date | None = None, t=None) -> dict | None:
 	target = max(cint(t.daily_target), 0)
 	meeting_target = max(cint(t.get("meeting_target")), 0)
 	meetings = meetings_assigned(user, start, end)
+	from hipersign_mobile.api.calls import not_reached_count
+
 	return {
+		# New leads called but never connected (all days) - to call back.
+		"new_not_reached": not_reached_count(user, new_only=True),
 		"target": target,
 		"made": st.made,
 		"connected": st.connected,

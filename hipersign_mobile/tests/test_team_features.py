@@ -279,6 +279,12 @@ class TestTeamFeatures(TestCase):
 		p = call_targets.progress(self.caller, day)
 		self.assertEqual((p["made"], p["counted"], p["remaining"], p["unit"]), (9, 3, 2, "new connected calls"))
 		self.assertEqual((p["meetings"], p["meetings_remaining"]), (1, 1))
+		self.assertEqual(p["new_not_reached"], 2)  # the 2 new numbers that never connected
+		from hipersign_mobile.api import calls as calls_api
+
+		r = call(calls_api.list_calls, self.caller, filter="new_not_reached")
+		self.assertEqual(len(r["data"]["items"]), 2)
+		self.assertEqual(r["data"]["today"]["new_not_reached"], 2)
 		# 2 new numbers not connected that day (the follow-ups / connected ones don't count).
 		self.assertEqual(p["new_not_reached_today"], 2)
 		call_targets.check(frappe.get_doc("Call Target", self.caller), now=dt.datetime.combine(day, dt.time(17, 1)))
