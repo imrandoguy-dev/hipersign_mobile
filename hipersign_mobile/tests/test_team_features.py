@@ -308,6 +308,9 @@ class TestTeamFeatures(TestCase):
 		call_targets.check(t, now=dt.datetime.combine(day, dt.time(16, 40)))
 		self.assertEqual(_notes(self.caller, "Call Target"), [])
 		self.assertTrue(call(targets.my_target, self.caller)["success"])
+		st = call_targets.idle_state(t, call_targets.progress(self.caller, day, t), dt.datetime.combine(day, dt.time(16, 2)),
+									 dt.datetime.combine(day, dt.time(16, 2)))
+		self.assertTrue(st and st["minutes"] >= 30)
 		listing = call(targets.list_targets, self.manager)["data"]["items"]
 		self.assertIn(self.caller, [x["user"] for x in listing])
 

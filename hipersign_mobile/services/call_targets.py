@@ -239,13 +239,31 @@ def check(t, now: dt.datetime | None = None):
 			_send(user, f"ct:{user}:{day}:{at.strftime('%H%M')}", title, body)
 
 	# 2) No calls for a while.
-	idle = cint(t.idle_minutes)
-	if idle <= 0 or p["target"] <= 0 or p["reached"]:
+	st = idle_state(t, p, local, now_sys)
+	if not st:
 		return
+	idle = cint(t.idle_minutes)
+	n = int(st["minutes"] // idle)  # alert again every `idle` minutes while it lasts
+	_send(
+		user,
+		f"ct-idle:{user}:{st['since']}:{n}",
+		f"No calls for {st['text']}",
+		f"Nothing scheduled right now. {p['remaining']} more {unit} needed today ({p['counted']} of {p['target']}).",
+	)
+
+
+def idle_state(t, p: dict, local: dt.datetime, now_sys: dt.datetime) -> dict | None:
+	"""{minutes, text, since} when the caller has made no call for the set time during working
+	hours (target not reached, nothing on the calendar right now), else None."""
+	idle = cint(t.idle_minutes)
+	if idle <= 0 or p["target"] <= 0 or p["reached"] or not p.get("working_day", True):
+		return None
+	day = local.date()
 	start = dt.datetime.combine(day, get_time(t.work_start or "09:30:00"))
 	end = dt.datetime.combine(day, get_time(t.work_end or "18:00:00"))
 	if not (start <= local < end) or _lunch(local):
-		return
+		return None
+	tz = timeutil.user_tz(t.user)
 	last = (
 		get_datetime(timeutil.parse_client_datetime(p["last_call"])).replace(tzinfo=timeutil.system_tz()).astimezone(tz).replace(tzinfo=None)
 		if p["last_call"]
@@ -253,16 +271,27 @@ def check(t, now: dt.datetime | None = None):
 	)
 	since = max(last or start, start)
 	gap = local - since
-	if gap < dt.timedelta(minutes=idle):
-		return
-	if _busy_now(user, now_sys):
-		return
-	n = int(gap.total_seconds() // (idle * 60))  # alert again every `idle` minutes while it lasts
+	if gap < dt.timedelta(minutes=idle) or _busy_now(t.user, now_sys):
+		return None
 	mins = int(gap.total_seconds() // 60)
-	took = f"{mins // 60} h {mins % 60} min" if mins >= 60 else f"{mins} min"
-	_send(
-		user,
-		f"ct-idle:{user}:{since.strftime('%Y%m%d%H%M')}:{n}",
-		f"No calls for {took}",
-		f"Nothing scheduled right now. {p['remaining']} more {unit} needed today ({p['counted']} of {p['target']}).",
-	)
+	return {
+		"minutes": mins,
+		"text": f"{mins // 60} h {mins % 60} min" if mins >= 60 else f"{mins} min",
+		"since": since.strftime("%Y%m%d%H%M"),
+	}
+
+
+def live_progress(user: str) -> dict | None:
+	"""Today's progress plus the "no calls" state, for the app's calendar banner."""
+	t = target_for(user)
+	if not t:
+		return None
+	now_sys = timeutil.now_system()
+	tz = timeutil.user_tz(user)
+	local = now_sys.replace(tzinfo=timeutil.system_tz()).astimezone(tz).replace(tzinfo=None)
+	p = progress(user, local.date(), t)
+	st = idle_state(t, p, local, now_sys) if p else None
+	if p is not None:
+		p["idle"] = bool(st)
+		p["idle_for"] = st["text"] if st else None
+	return p

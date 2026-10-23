@@ -13,7 +13,7 @@ from hipersign_mobile.services import permissions as perms
 @mobile_api(methods=("GET",))
 def my_target():
 	me = frappe.session.user
-	return {"target": ct.progress(me)}
+	return {"target": ct.live_progress(me)}
 
 
 @mobile_api(methods=("GET",))
