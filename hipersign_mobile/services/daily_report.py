@@ -152,7 +152,9 @@ def build(user: str, day: dt.date) -> dict:
 				"reference_name": r.name,
 			})
 
-	made, connected, _last = call_targets.calls_between(user, start, end)
+	st = call_targets.call_stats(user, start, end)
+	made, connected = st.made, st.connected
+	meetings = call_targets.meetings_assigned(user, start, end)
 	target = call_targets.target_for(user)
 	done = sum(1 for i in items if i["done"])
 	not_done = sum(1 for i in items if i["open"])
@@ -166,12 +168,15 @@ def build(user: str, day: dt.date) -> dict:
 		"cancelled": sum(1 for i in items if i["result"] == "Cancelled"),
 		"calls_made": made,
 		"calls_connected": connected,
+		"new_connected": st.new_connected,
+		"meetings_assigned": meetings,
+		"meeting_target": cint(target.get("meeting_target")) if target else None,
 		"call_target": cint(target.daily_target) if target else None,
 	}
 
 
 def has_content(r: dict) -> bool:
-	return bool(r["items"] or r["calls_made"])
+	return bool(r["items"] or r["calls_made"] or r.get("meetings_assigned"))
 
 
 def employees() -> list[str]:
@@ -196,6 +201,8 @@ def save(r: dict) -> str:
 		"not_done_count": r["not_done"],
 		"calls_made": r["calls_made"],
 		"calls_connected": r["calls_connected"],
+		"new_connected": r.get("new_connected") or 0,
+		"meetings_assigned": r.get("meetings_assigned") or 0,
 		"call_target": r["call_target"] or 0,
 	})
 	doc.set("items", [])
@@ -209,7 +216,9 @@ def save(r: dict) -> str:
 def summary_line(r: dict) -> str:
 	parts = [f"{r['done']} done", f"{r['not_done']} not done"]
 	if r["calls_made"] or r["call_target"]:
-		parts.append(f"{r['calls_made']} calls" + (f" / {r['call_target']}" if r["call_target"] else ""))
+		parts.append(f"{r['calls_made']} calls ({r.get('new_connected') or 0} new connected)")
+	if r.get("meetings_assigned") or r.get("meeting_target"):
+		parts.append(f"{r.get('meetings_assigned') or 0} meetings assigned" + (f" / {r['meeting_target']}" if r.get("meeting_target") else ""))
 	return " · ".join(parts)
 
 

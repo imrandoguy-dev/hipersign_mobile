@@ -40,6 +40,8 @@ def list_targets():
 				"work_start": str(t.work_start or "09:30:00")[:5] if t else "09:30",
 				"work_end": str(t.work_end or "18:00:00")[:5] if t else "18:00",
 				"count_connected_only": bool(t and cint(t.count_connected_only)),
+				"count_new_only": bool(t and cint(t.get("count_new_only"))),
+				"meeting_target": cint(t.get("meeting_target")) if t else 0,
 				"progress": ct.progress(r.name, t=t) if t and cint(t.enabled) else None,
 			}
 		)
@@ -56,6 +58,8 @@ def save_target(
 	work_end: str | None = None,
 	enabled: str | int | bool | None = None,
 	count_connected_only: str | int | bool | None = None,
+	count_new_only: str | int | bool | None = None,
+	meeting_target: int | str | None = None,
 ):
 	me = frappe.session.user
 	perms.require("call_targets", me)
@@ -84,6 +88,10 @@ def save_target(
 		doc.enabled = 1
 	if count_connected_only is not None:
 		doc.count_connected_only = flag(count_connected_only)
+	if count_new_only is not None:
+		doc.count_new_only = flag(count_new_only)
+	if meeting_target is not None:
+		doc.meeting_target = max(cint(meeting_target), 0)
 	doc.set_by = me
 	doc.save(ignore_permissions=True) if not doc.is_new() else doc.insert(ignore_permissions=True)
 	return {"saved": True, "progress": ct.progress(user, t=doc) if doc.enabled else None}

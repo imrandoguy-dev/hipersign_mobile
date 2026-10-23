@@ -47,6 +47,40 @@ def target_for(user: str):
 	return frappe.get_doc(DOCTYPE, name) if name else None
 
 
+def call_stats(user: str, start: dt.datetime, end: dt.datetime) -> frappe._dict:
+	"""Outgoing calls in [start, end): made, connected, new, new connected, last call time."""
+	rows = frappe.get_all(
+		"Mobile Call Log",
+		filters=[["caller", "=", user], ["direction", "=", "Outgoing"], ["call_datetime", ">=", start], ["call_datetime", "<", end]],
+		fields=["connected", "call_type", "call_datetime"],
+		limit=5000,
+	)
+	new = [r for r in rows if (r.call_type or "New") == "New"]
+	return frappe._dict(
+		made=len(rows),
+		connected=sum(1 for r in rows if cint(r.connected)),
+		new=len(new),
+		new_connected=sum(1 for r in new if cint(r.connected)),
+		last=max((get_datetime(r.call_datetime) for r in rows), default=None),
+	)
+
+
+def meetings_assigned(user: str, start: dt.datetime, end: dt.datetime) -> int:
+	"""Meetings the person booked in [start, end): from the app (CRM Task meetings they created)
+	and from the daily report (Scheduled Meeting assigned by them)."""
+	n = 0
+	if frappe.get_meta("CRM Task").has_field("hm_activity_type"):
+		n += frappe.db.count(
+			"CRM Task",
+			{"owner": user, "hm_activity_type": "Meeting", "status": ["!=", "Canceled"], "creation": ["between", [start, end - dt.timedelta(seconds=1)]]},
+		)
+	if frappe.db.exists("DocType", "Scheduled Meeting") and frappe.get_meta("Scheduled Meeting").has_field("assigned_by"):
+		n += frappe.db.count(
+			"Scheduled Meeting", {"assigned_by": user, "creation": ["between", [start, end - dt.timedelta(seconds=1)]]}
+		)
+	return n
+
+
 def calls_between(user: str, start: dt.datetime, end: dt.datetime, connected_only: bool = False) -> tuple[int, int, dt.datetime | None]:
 	"""(outgoing calls, connected calls, last call time) in [start, end) - system time."""
 	rows = frappe.get_all(
@@ -74,24 +108,39 @@ def progress(user: str, day: dt.date | None = None, t=None) -> dict | None:
 	tz = timeutil.user_tz(user)
 	day = day or dt.datetime.now(tz).date()
 	start, end = timeutil.user_day_bounds(day, day, user)
-	made, connected, last = calls_between(user, start, end)
-	counted = connected if cint(t.count_connected_only) else made
+	st = call_stats(user, start, end)
+	connected_only, new_only = bool(cint(t.count_connected_only)), bool(cint(t.get("count_new_only")))
+	counted = (st.new_connected if connected_only else st.new) if new_only else (st.connected if connected_only else st.made)
 	target = max(cint(t.daily_target), 0)
+	meeting_target = max(cint(t.get("meeting_target")), 0)
+	meetings = meetings_assigned(user, start, end)
 	return {
 		"target": target,
-		"made": made,
-		"connected": connected,
+		"made": st.made,
+		"connected": st.connected,
+		"new_connected": st.new_connected,
 		"counted": counted,
 		"remaining": max(target - counted, 0),
 		"reached": counted >= target > 0,
-		"connected_only": bool(cint(t.count_connected_only)),
-		"last_call": timeutil.to_iso(last),
+		"connected_only": connected_only,
+		"new_only": new_only,
+		"unit": count_unit(connected_only, new_only),
+		"meeting_target": meeting_target,
+		"meetings": meetings,
+		"meetings_remaining": max(meeting_target - meetings, 0),
+		"last_call": timeutil.to_iso(st.last),
 		"check_times": [x.strftime("%H:%M") for x in parse_times(t.check_times)],
 		"idle_minutes": cint(t.idle_minutes),
 		"work_start": str(t.work_start or "09:30:00")[:5],
 		"work_end": str(t.work_end or "18:00:00")[:5],
 		"working_day": day.weekday() in working_days(t),
 	}
+
+
+def count_unit(connected_only: bool, new_only: bool) -> str:
+	if new_only:
+		return "new connected calls" if connected_only else "new calls"
+	return "connected calls" if connected_only else "calls"
 
 
 def _busy_now(user: str, now: dt.datetime) -> bool:
@@ -163,24 +212,35 @@ def check(t, now: dt.datetime | None = None):
 	if day.weekday() not in working_days(t):
 		return
 	p = progress(user, day, t)
-	if not p or p["target"] <= 0:
+	if not p or (p["target"] <= 0 and p["meeting_target"] <= 0):
 		return
-	unit = "connected calls" if p["connected_only"] else "calls"
+	unit = p["unit"]
+	meet = ""
+	if p["meeting_target"]:
+		meet = (
+			f" Meetings: {p['meetings']} of {p['meeting_target']}"
+			+ (f" - {p['meetings_remaining']} more to assign." if p["meetings_remaining"] else " - done.")
+		)
 
 	# 1) Check times: "34 more calls needed".
 	for at in parse_times(t.check_times):
 		when = dt.datetime.combine(day, at)
 		if when <= local < when + WINDOW:
-			if p["reached"]:
-				title, body = "Call target reached", f"{p['counted']} {unit} today (target {p['target']}). Well done!"
+			if p["target"] <= 0 or p["reached"]:
+				if p["meetings_remaining"]:
+					title = f"{p['meetings_remaining']} more meeting{'s' if p['meetings_remaining'] > 1 else ''} to assign"
+					body = (f"{p['counted']} {unit} today." if p["target"] else "") + meet
+				else:
+					title = "Target reached"
+					body = (f"{p['counted']} {unit} today (target {p['target']})." if p["target"] else "") + meet + " Well done!"
 			else:
 				title = f"{p['remaining']} more {unit} needed"
-				body = f"Today: {p['counted']} of {p['target']} {unit}. {p['remaining']} more to reach your target."
+				body = f"Today: {p['counted']} of {p['target']} {unit}. {p['remaining']} more to reach your target." + meet
 			_send(user, f"ct:{user}:{day}:{at.strftime('%H%M')}", title, body)
 
 	# 2) No calls for a while.
 	idle = cint(t.idle_minutes)
-	if idle <= 0 or p["reached"]:
+	if idle <= 0 or p["target"] <= 0 or p["reached"]:
 		return
 	start = dt.datetime.combine(day, get_time(t.work_start or "09:30:00"))
 	end = dt.datetime.combine(day, get_time(t.work_end or "18:00:00"))

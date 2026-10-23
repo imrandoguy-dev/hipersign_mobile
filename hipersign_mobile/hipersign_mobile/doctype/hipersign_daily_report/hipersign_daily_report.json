@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 0,
  "autoname": "format:DR-{report_date}-{user}",
- "creation": "2026-10-22 22:00:00.000000",
+ "creation": "2026-10-23 10:45:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -14,6 +14,8 @@
   "not_done_count",
   "calls_made",
   "calls_connected",
+  "new_connected",
+  "meetings_assigned",
   "call_target",
   "items_section",
   "items"
@@ -77,6 +79,18 @@
    "read_only": 1
   },
   {
+   "fieldname": "new_connected",
+   "fieldtype": "Int",
+   "label": "New Calls Connected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meetings_assigned",
+   "fieldtype": "Int",
+   "label": "Meetings Assigned",
+   "read_only": 1
+  },
+  {
    "fieldname": "call_target",
    "fieldtype": "Int",
    "label": "Call Target",
@@ -97,7 +111,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-22 22:00:00.000000",
+ "modified": "2026-10-23 10:45:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Hipersign Daily Report",

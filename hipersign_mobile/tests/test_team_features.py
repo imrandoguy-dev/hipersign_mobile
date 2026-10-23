@@ -255,13 +255,35 @@ class TestTeamFeatures(TestCase):
 
 	# ------------------------------------------------------------ call targets
 
-	def _log_calls(self, n, at: dt.datetime, connected=1):
+	def _log_calls(self, n, at: dt.datetime, connected=1, call_type="New"):
 		for i in range(n):
 			frappe.get_doc({
 				"doctype": "Mobile Call Log", "caller": self.caller, "call_datetime": at + dt.timedelta(minutes=i),
 				"direction": "Outgoing", "connected": connected, "duration_seconds": 30, "phone": f"+9190000{i:05d}",
-				"source": "Hipersign", "sync_key": f"t-{at.isoformat()}-{i}",
+				"source": "Hipersign", "sync_key": f"t-{at.isoformat()}-{i}-{call_type}-{connected}", "call_type": call_type,
 			}).insert(ignore_permissions=True)
+
+	def test_new_connected_calls_and_meeting_target(self):
+		r = call(targets.save_target, self.manager, user=self.caller, daily_target=5, count_connected_only=1,
+				 count_new_only=1, meeting_target=2, check_times="17:00")
+		self.assertTrue(r["success"], r)
+		day = _next_weekday(6)
+		frappe.db.delete("CRM Task", {"title": "Meet X"})
+		self._log_calls(3, dt.datetime.combine(day, dt.time(10, 0)))  # new, connected
+		self._log_calls(2, dt.datetime.combine(day, dt.time(11, 0)), connected=0)  # new, not connected
+		self._log_calls(4, dt.datetime.combine(day, dt.time(12, 0)), call_type="Follow-up")  # follow-ups
+		make_task(self.manager, dt.datetime.combine(day, dt.time(15, 0)), title="Meet X", ref=("Customer", self.customer),
+				  hm_activity_type="Meeting")
+		frappe.db.set_value("CRM Task", {"title": "Meet X"}, {"creation": dt.datetime.combine(day, dt.time(10, 30)), "owner": self.caller})
+		frappe.db.commit()
+		p = call_targets.progress(self.caller, day)
+		self.assertEqual((p["made"], p["counted"], p["remaining"], p["unit"]), (9, 3, 2, "new connected calls"))
+		self.assertEqual((p["meetings"], p["meetings_remaining"]), (1, 1))
+		call_targets.check(frappe.get_doc("Call Target", self.caller), now=dt.datetime.combine(day, dt.time(17, 1)))
+		body = frappe.db.get_value("Mobile Notification", {"recipient": self.caller, "event_type": "Call Target", "title": ["like", "2 more%"]}, "body")
+		self.assertIn("Meetings: 1 of 2", body)
+		frappe.db.delete("CRM Task", {"title": "Meet X"})
+		frappe.db.commit()
 
 	def test_call_target_alerts(self):
 		self.assertFalse(call(targets.save_target, self.caller, user=self.caller, daily_target=10)["success"])

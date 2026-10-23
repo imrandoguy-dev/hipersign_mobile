@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 0,
  "autoname": "field:user",
- "creation": "2026-10-22 22:00:00.000000",
+ "creation": "2026-10-23 10:45:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -11,6 +11,8 @@
   "enabled",
   "daily_target",
   "count_connected_only",
+  "count_new_only",
+  "meeting_target",
   "column_break_1",
   "check_times",
   "idle_minutes",
@@ -55,6 +57,20 @@
    "fieldname": "count_connected_only",
    "fieldtype": "Check",
    "label": "Count Only Connected Calls"
+  },
+  {
+   "default": "0",
+   "description": "Only calls marked New (first call to that number), not follow-up calls. With 'Count Only Connected Calls' too = new connected calls.",
+   "fieldname": "count_new_only",
+   "fieldtype": "Check",
+   "label": "Count Only New Calls"
+  },
+  {
+   "default": "0",
+   "description": "Meetings the caller books for the sales team each day (0 = no meeting target).",
+   "fieldname": "meeting_target",
+   "fieldtype": "Int",
+   "label": "Meetings To Assign Per Day"
   },
   {
    "fieldname": "column_break_1",
@@ -103,7 +119,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-22 22:00:00.000000",
+ "modified": "2026-10-23 10:45:00.000000",
  "modified_by": "Administrator",
  "module": "Hipersign Mobile",
  "name": "Call Target",
