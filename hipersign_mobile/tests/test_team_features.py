@@ -99,6 +99,12 @@ class TestTeamFeatures(TestCase):
 		self.assertEqual((t["kind"], t["team"], t["developer"]), ("team", "Accounts", self.accounts))
 		self.assertTrue(t["id"].startswith("TASK-"))
 		self.assertEqual(_notes(self.accounts, "Task"), ["New task"])
+		# On the person's calendar on the deadline day.
+		day = timeutil.parse_client_datetime(t["deadline"]).date()
+		cal = call(calendar.get_my_day, self.manager, start_date=str(day), end_date=str(day), user=self.accounts)
+		self.assertIn(t["id"], [x["id"] for x in cal["data"]["tasks"]])
+		cal = call(calendar.get_my_day, self.accounts, start_date=str(day), end_date=str(day))
+		self.assertIn(t["id"], [x["id"] for x in cal["data"]["tasks"]], cal)
 		# An accounts person without any app role sees it as their own work.
 		r = call(development.list_tasks, self.accounts, kind="team")
 		self.assertTrue(r["success"], r)

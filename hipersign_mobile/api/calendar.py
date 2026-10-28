@@ -63,7 +63,12 @@ def get_my_day(start_date: str | None = None, end_date: str | None = None, user:
 	)
 
 	items.sort(key=lambda a: (a["start"] or "", STATE_ORDER.get(a["display_state"], 9)))
+	tasks, tasks_overdue = _work_tasks(target or me, range_start, range_end)
 	return {
+		# Team tasks and development work assigned to the person: on the day of their deadline,
+		# and (still open, deadline passed) with the overdue items.
+		"tasks": tasks,
+		"tasks_overdue": tasks_overdue,
 		"range": {"start_date": str(start_d), "end_date": str(end_d)},
 		"items": items,
 		"overdue": [svc.serialize(r, today_start, cc=cc) for r in overdue[:200]],
@@ -95,7 +100,48 @@ def get_month_markers(month: str):
 		state = svc.display_state(r, today_start)
 		day = markers.setdefault(str(local), {})
 		day[state] = day.get(state, 0) + 1
+	from hipersign_mobile.services import development as dev
+
+	for k in dev.KINDS.values():
+		if not frappe.db.table_exists(k.doctype):
+			continue
+		for t in frappe.get_all(
+			k.doctype, filters=[[k.person, "=", me], ["deadline", ">=", start], ["deadline", "<", end]],
+			fields=["deadline", "status"], limit=500,
+		):
+			local = frappe.utils.get_datetime(t.deadline).replace(tzinfo=timeutil.system_tz()).astimezone(tz).date()
+			if t.status == "Done":
+				state = "completed"
+			elif t.status == "Cancelled":
+				state = "cancelled"
+			else:
+				state = "active" if frappe.utils.get_datetime(t.deadline) >= today_start else "pending"
+			day = markers.setdefault(str(local), {})
+			day[state] = day.get(state, 0) + 1
 	return {"month": first.strftime("%Y-%m"), "days": markers}
+
+
+def _work_tasks(user: str, start, end):
+	from hipersign_mobile.services import development as dev
+
+	me = frappe.session.user
+	due, late = [], []
+	now = timeutil.now_system()
+	for k in dev.KINDS.values():
+		if not frappe.db.table_exists(k.doctype):
+			continue
+		for name in frappe.get_all(
+			k.doctype, filters=[[k.person, "=", user], ["deadline", ">=", start], ["deadline", "<", end]],
+			pluck="name", order_by="deadline asc", limit=200,
+		):
+			due.append(dev.serialize(frappe.get_doc(k.doctype, name), me))
+		for name in frappe.get_all(
+			k.doctype, filters=[[k.person, "=", user], ["status", "in", dev.OPEN], ["deadline", "<", now]],
+			pluck="name", order_by="deadline desc", limit=50,
+		):
+			late.append(dev.serialize(frappe.get_doc(k.doctype, name), me))
+	due.sort(key=lambda t: t["deadline"] or "")
+	return due, late
 
 
 def _counts(items):

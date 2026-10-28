@@ -74,7 +74,10 @@ class TestAccess(Base):
 	def test_user_without_mobile_role_gets_no_workspace(self):
 		r = call(auth.get_me, self.norole)
 		self.assertEqual(r["data"]["workspaces"], [])
+		# Everyone has a calendar of their own work (tasks by deadline) - but nobody else's.
 		r = call(calendar.get_my_day, self.norole)
+		self.assertTrue(r["success"], r)
+		r = call(calendar.get_my_day, self.norole, user=self.s1)
 		self.assertEqual(r["_http_status"], 403)
 		self.assertEqual(r["error"]["code"], "FORBIDDEN")
 
