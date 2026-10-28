@@ -105,6 +105,9 @@ class TestTeamFeatures(TestCase):
 		self.assertIn(t["id"], [x["id"] for x in cal["data"]["tasks"]])
 		cal = call(calendar.get_my_day, self.accounts, start_date=str(day), end_date=str(day))
 		self.assertIn(t["id"], [x["id"] for x in cal["data"]["tasks"]], cal)
+		# ... and every day before that while it is open (today too).
+		cal = call(calendar.get_my_day, self.accounts)
+		self.assertIn(t["id"], [x["id"] for x in cal["data"]["tasks"]], cal)
 		# An accounts person without any app role sees it as their own work.
 		r = call(development.list_tasks, self.accounts, kind="team")
 		self.assertTrue(r["success"], r)

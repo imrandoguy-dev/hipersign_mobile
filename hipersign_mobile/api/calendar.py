@@ -130,10 +130,18 @@ def _work_tasks(user: str, start, end):
 	for k in dev.KINDS.values():
 		if not frappe.db.table_exists(k.doctype):
 			continue
-		for name in frappe.get_all(
+		# Open work shows every day from when it was given until its deadline; finished work on
+		# its deadline day.
+		names = set(frappe.get_all(
 			k.doctype, filters=[[k.person, "=", user], ["deadline", ">=", start], ["deadline", "<", end]],
-			pluck="name", order_by="deadline asc", limit=200,
-		):
+			pluck="name", limit=200,
+		))
+		names |= set(frappe.get_all(
+			k.doctype,
+			filters=[[k.person, "=", user], ["status", "in", dev.OPEN], ["creation", "<", end], ["deadline", ">=", start]],
+			pluck="name", limit=200,
+		))
+		for name in names:
 			due.append(dev.serialize(frappe.get_doc(k.doctype, name), me))
 		for name in frappe.get_all(
 			k.doctype, filters=[[k.person, "=", user], ["status", "in", dev.OPEN], ["deadline", "<", now]],

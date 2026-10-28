@@ -316,6 +316,7 @@ def serialize(doc, me: str | None = None) -> dict:
 		"can_edit": can_edit(doc, me),
 		"is_mine": who_does == me,
 		"attachments": attachment_count(doc),
+		"created": timeutil.to_iso(doc.creation),
 		"modified": timeutil.to_iso(doc.modified),
 	}
 
