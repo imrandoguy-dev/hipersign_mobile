@@ -15,7 +15,7 @@ from hipersign_mobile.services import permissions as perms
 from hipersign_mobile.services import timeutil
 
 DOCTYPES = ("Development Task", "Team Task", "Trial Booking", "Hipersign Feedback", "Hipersign Concern")
-MAX_MB = 50
+MAX_MB = 50  # the web server's own upload limit is about this size too
 AUDIO = ("m4a", "aac", "mp3", "ogg", "opus", "wav", "amr", "3gp")
 IMAGE = ("jpg", "jpeg", "png", "webp", "gif", "heic")
 VIDEO = ("mp4", "mov", "mkv", "webm")
@@ -110,6 +110,12 @@ def upload(doctype: str | None = None, name: str | None = None, voice: str | int
 		ext = file_name.rsplit(".", 1)[-1] if "." in file_name else "m4a"
 		stamp = frappe.utils.format_datetime(timeutil.now_system(), "d MMM h.mm a")
 		file_name = f"Voice note {stamp}.{ext}"
+	# Frappe's own file limit (System Settings, default 25 MB) would refuse videos; the size is
+	# already checked above for these attachments.
+	import frappe.core.api.file as file_api
+
+	site_limit = file_api.get_max_file_size
+	file_api.get_max_file_size = lambda: max(site_limit(), max_bytes)
 	try:
 		saved = frappe.get_doc(
 			{
@@ -126,6 +132,8 @@ def upload(doctype: str | None = None, name: str | None = None, voice: str | int
 	except Exception:
 		frappe.log_error(title="Hipersign attachment upload")
 		raise frappe.ValidationError("This file could not be saved. Is it damaged? Try another file.")
+	finally:
+		file_api.get_max_file_size = site_limit
 	doc.add_comment("Attachment", f"{frappe.utils.get_fullname(me)} added {frappe.utils.escape_html(file_name)}")
 	return serialize(frappe.db.get_value("File", saved.name, ["name", "file_name", "file_size", "owner", "creation"], as_dict=True))
 

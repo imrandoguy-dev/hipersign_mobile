@@ -147,6 +147,14 @@ class TestTeamFeatures(TestCase):
 		with _with_file("brief.txt", b"Pay before the 20th"):
 			r2 = call(attachments.upload, self.accounts, doctype="Team Task", name=t["id"])
 			self.assertTrue(r2["success"], r2)
+		# A 30 MB video is accepted even though Frappe's default limit is lower.
+		frappe.db.set_single_value("System Settings", "max_file_size", 10)
+		with _with_file("site.mp4", b"0" * (30 * 1024 * 1024)):
+			r3 = call(attachments.upload, self.accounts, doctype="Team Task", name=t["id"])
+		frappe.db.set_single_value("System Settings", "max_file_size", 0)
+		self.assertTrue(r3["success"], r3)
+		self.assertEqual(r3["data"]["kind"], "video")
+		frappe.delete_doc("File", r3["data"]["id"], ignore_permissions=True)
 		frappe.db.commit()
 		files = call(attachments.list_files, self.accounts, doctype="Team Task", name=t["id"])["data"]["items"]
 		self.assertEqual([f["kind"] for f in files], ["audio", "document"])
