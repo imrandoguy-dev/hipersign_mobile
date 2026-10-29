@@ -70,10 +70,15 @@ def meetings_assigned(user: str, start: dt.datetime, end: dt.datetime) -> int:
 	and from the daily report (Scheduled Meeting assigned by them)."""
 	n = 0
 	if frappe.get_meta("CRM Task").has_field("hm_activity_type"):
-		n += frappe.db.count(
+		grouped = frappe.get_meta("CRM Task").has_field("hm_meeting_group")
+		rows = frappe.get_all(
 			"CRM Task",
-			{"owner": user, "hm_activity_type": "Meeting", "status": ["!=", "Canceled"], "creation": ["between", [start, end - dt.timedelta(seconds=1)]]},
+			filters={"owner": user, "hm_activity_type": "Meeting", "status": ["!=", "Canceled"], "creation": ["between", [start, end - dt.timedelta(seconds=1)]]},
+			fields=["name", "hm_meeting_group"] if grouped else ["name"],
+			limit=5000,
 		)
+		# A meeting with several people has one copy per person: count it once.
+		n += len({str(r.get("hm_meeting_group") or r.name) for r in rows})
 	if frappe.db.exists("DocType", "Scheduled Meeting") and frappe.get_meta("Scheduled Meeting").has_field("assigned_by"):
 		n += frappe.db.count(
 			"Scheduled Meeting", {"assigned_by": user, "creation": ["between", [start, end - dt.timedelta(seconds=1)]]}

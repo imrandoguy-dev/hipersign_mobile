@@ -102,6 +102,16 @@ CRM_TASK_FIELDS = {
 			"insert_after": "hm_trial_booking",
 		},
 		{
+			"fieldname": "hm_meeting_group",
+			"fieldtype": "Data",
+			"label": "Meeting Group",
+			"description": "Same value on every person's copy of one meeting.",
+			"read_only": 1,
+			"no_copy": 1,
+			"search_index": 1,
+			"insert_after": "hm_idempotency_key",
+		},
+		{
 			"fieldname": "hm_reminder_offsets",
 			"fieldtype": "Data",
 			"label": "Reminders (Minutes Before)",

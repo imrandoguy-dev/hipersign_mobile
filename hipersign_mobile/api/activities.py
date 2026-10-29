@@ -91,6 +91,7 @@ def create_activity(
 	assigned_to: str | None = None,
 	idempotency_key: str | None = None,
 	reminder_offsets: str | list | None = None,
+	people: str | list | None = None,
 	# Convenience aliases matching the spec's request example
 	lead: str | None = None,
 	customer: str | None = None,
@@ -125,6 +126,7 @@ def create_activity(
 		"assigned_to": assigned_to,
 		"idempotency_key": idempotency_key,
 		"reminder_offsets": reminder_offsets,
+		"people": people,
 	}
 	if not payload["start"]:
 		raise frappe.ValidationError("Start time is required.")
@@ -171,6 +173,7 @@ def update_activity(
 	reference_doctype: str | None = None,
 	reference_name: str | None = None,
 	reminder_offsets: str | list | None = None,
+	people: str | list | None = None,
 ):
 	"""Edit an open follow-up / meeting. Only the fields sent are changed."""
 	me = frappe.session.user
@@ -188,14 +191,35 @@ def update_activity(
 			"reference_doctype": reference_doctype,
 			"reference_name": reference_name,
 			"reminder_offsets": reminder_offsets,
+			"people": people,
 		}.items()
 		if k in frappe.form_dict or v is not None
 	}
 	task, changed = svc.update_details(me, activity_id, sent)
+	if not frappe.db.exists("CRM Task", task.name):
+		# You took yourself out of the meeting.
+		return {"changed": True, "removed": True, "activity": None}
 	row = frappe.db.get_value("CRM Task", task.name, svc.task_fields(), as_dict=True)
 	data = svc.serialize(row)
 	data["history"] = svc.history_for(task.name)[:5]
 	return {"changed": changed, "activity": data}
+
+
+@mobile_api(methods=("GET",))
+def people():
+	"""Everyone who can be added to a meeting: active desk users and employees with a login."""
+	perms.require("create_activity", frappe.session.user)
+	users = set(frappe.get_all("User", filters={"enabled": 1, "user_type": "System User"}, pluck="name"))
+	if frappe.db.table_exists("Employee"):
+		users |= {u for u in frappe.get_all("Employee", filters={"status": "Active"}, pluck="user_id") if u}
+	users -= {"Administrator", "Guest"}
+	rows = frappe.get_all(
+		"User",
+		filters={"name": ["in", list(users) or [""]], "enabled": 1},
+		fields=["name", "full_name"],
+		order_by="full_name asc",
+	)
+	return {"items": [{"id": r.name, "name": r.full_name or r.name} for r in rows]}
 
 
 @mobile_api(methods=("POST",))
@@ -212,8 +236,11 @@ def delete_activity(activity_id: str | int, reason: str | None = None):
 	when = frappe.utils.format_datetime(task.due_date, "d MMM yyyy, h:mm a") if task.due_date else "no date"
 	kind = (task.get("hm_activity_type") or "Follow-up").lower()
 	ref_dt, ref_name, title, name = task.reference_doctype, task.reference_docname, task.title, task.name
-	frappe.db.delete("Sales Activity History", {"crm_task": name})
-	frappe.delete_doc("CRM Task", name, ignore_permissions=True, force=True)
+	# The organiser (or a manager) deletes the meeting for everyone; anyone else just leaves it.
+	everyone = me == task.owner or "team_view" in caps
+	for n in [name, *([d.name for d in svc.siblings(task, open_only=False)] if everyone else [])]:
+		frappe.db.delete("Sales Activity History", {"crm_task": n})
+		frappe.delete_doc("CRM Task", n, ignore_permissions=True, force=True)
 	# Leave a trace on the customer / lead / deal timeline.
 	if ref_dt and ref_name and frappe.db.exists(ref_dt, ref_name):
 		why = optional_str(reason, 500)

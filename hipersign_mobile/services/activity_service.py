@@ -53,6 +53,7 @@ BASE_FIELDS = [
 	"hm_outcome",
 	"hm_completion_notes",
 	"hm_trial_booking",
+	"hm_meeting_group",
 ]
 OPTIONAL_FIELDS = [
 	"custom_location",
@@ -142,6 +143,11 @@ def serialize(
 		else None,
 		"modified": timeutil.to_iso(row.get("modified")),
 	}
+	if row.get("hm_meeting_group"):
+		out["meeting_group"] = row.get("hm_meeting_group")
+		out["people"] = group_people(row.get("hm_meeting_group"))
+	else:
+		out["people"] = [{"id": row.get("assigned_to"), "name": _full_name(row.get("assigned_to")), "status": out["status"]}] if row.get("assigned_to") else []
 	if with_party:
 		out["party"] = party_summary(row.get("reference_doctype"), row.get("reference_docname"), cc=cc)
 	return out
@@ -284,12 +290,13 @@ def create_activity(user: str, payload: dict) -> tuple[frappe.model.document.Doc
 				raise frappe.ValidationError("This request key was already used.")
 			return frappe.get_doc("CRM Task", existing.name), False
 
-	assignee = payload.get("assigned_to") or user
-	if assignee != user:
-		if "assign_others" not in caps:
-			raise frappe.PermissionError("You can only create activities for yourself.")
-		if not frappe.db.get_value("User", assignee, "enabled"):
-			raise frappe.ValidationError("The selected assignee is not an active user.")
+	kind = payload.get("activity_type") or "Follow-up"
+	people = parse_people(payload.get("people"))
+	if not people:
+		people = [payload.get("assigned_to") or user]
+	for person in people:
+		_check_person(person, user, caps, kind)
+	assignee = user if user in people else people[0]
 
 	ref_doctype = payload.get("reference_doctype")
 	ref_name = payload.get("reference_name")
@@ -330,7 +337,147 @@ def create_activity(user: str, payload: dict) -> tuple[frappe.model.document.Doc
 		task.hm_reminder_offsets = offsets_text(parse_offsets(payload["reminder_offsets"]))
 	task.flags.hm_reason = payload.get("reason")
 	task.insert(ignore_permissions=True)
+	others = [p for p in people if p != assignee]
+	if others:
+		task.db_set("hm_meeting_group", str(task.name), update_modified=False)
+		for person in others:
+			_copy_for(task, person, key)
 	return task, True
+
+
+# ---------------------------------------------------------------- several people, one meeting
+# Each person gets their own copy (so it is on their calendar with their own reminders);
+# the copies share hm_meeting_group, and edits / reschedules / cancel are applied to all.
+
+SHARED_FIELDS = (
+	"title",
+	"hm_activity_type",
+	"priority",
+	"description",
+	"hm_meeting_link",
+	"custom_location",
+	"reference_doctype",
+	"reference_docname",
+	"due_date",
+	"start_date",
+	"hm_end_datetime",
+)
+
+
+def parse_people(value) -> list[str]:
+	if not value:
+		return []
+	if isinstance(value, str):
+		value = value.strip()
+		if value.startswith("["):
+			value = frappe.parse_json(value)
+		else:
+			value = value.split(",")
+	out = []
+	for v in value:
+		v = (v.get("id") if isinstance(v, dict) else str(v or "")).strip()
+		if v and v not in out:
+			out.append(v)
+	if len(out) > 50:
+		raise frappe.ValidationError("A meeting can have up to 50 people.")
+	return out
+
+
+def _check_person(person: str, user: str, caps: set, kind: str):
+	if person == user:
+		return
+	# Anyone can invite colleagues to a meeting; follow-ups for others need a manager.
+	if kind != "Meeting" and "assign_others" not in caps:
+		raise frappe.PermissionError("You can only create follow-ups for yourself.")
+	if not frappe.db.get_value("User", person, "enabled"):
+		raise frappe.ValidationError(f"{person} is not an active user.")
+
+
+def _full_name(user):
+	from frappe.utils import get_fullname
+
+	return get_fullname(user) if user else None
+
+
+def group_people(group) -> list[dict]:
+	rows = frappe.get_all(
+		"CRM Task",
+		filters={"hm_meeting_group": group},
+		fields=["name", "assigned_to", "status", "hm_reschedule_count"],
+		order_by="creation asc",
+	)
+	return [
+		{"id": r.assigned_to, "name": _full_name(r.assigned_to), "status": mobile_status(r)}
+		for r in rows
+		if r.assigned_to
+	]
+
+
+def siblings(task, open_only: bool = True) -> list:
+	group = task.get("hm_meeting_group")
+	if not group:
+		return []
+	filters = {"hm_meeting_group": group, "name": ["!=", task.name]}
+	if open_only:
+		filters["status"] = ["in", list(OPEN_STATUSES)]
+	return [frappe.get_doc("CRM Task", n) for n in frappe.get_all("CRM Task", filters=filters, pluck="name")]
+
+
+def _copy_for(task, person: str, key=None):
+	if frappe.db.exists("CRM Task", {"hm_meeting_group": task.hm_meeting_group, "assigned_to": person}):
+		return None
+	doc = frappe.new_doc("CRM Task")
+	for f in SHARED_FIELDS + ("hm_reminder_offsets",):
+		if doc.meta.has_field(f):
+			doc.set(f, task.get(f))
+	doc.update(
+		{
+			"status": task.status if task.status in OPEN_STATUSES else "Todo",
+			"assigned_to": person,
+			"hm_meeting_group": task.hm_meeting_group,
+			"hm_idempotency_key": f"{key}:{person}"[:140] if key else None,
+		}
+	)
+	doc.insert(ignore_permissions=True)
+	return doc
+
+
+def _sync_siblings(task, reason=None):
+	for other in siblings(task):
+		changed = False
+		for f in SHARED_FIELDS:
+			if other.meta.has_field(f) and other.get(f) != task.get(f):
+				other.set(f, task.get(f))
+				changed = True
+		if changed:
+			other.flags.hm_reason = reason
+			other.save(ignore_permissions=True)
+
+
+def set_people(user: str, task, people: list[str], reason=None) -> bool:
+	"""Add / remove people from a meeting. Removed people's copies are deleted."""
+	if not people:
+		raise frappe.ValidationError("Choose at least one person.")
+	caps = perms.capabilities(user)
+	kind = task.get("hm_activity_type") or "Follow-up"
+	current = {d.assigned_to: d for d in [task, *siblings(task, open_only=False)] if d.assigned_to}
+	added = [p for p in people if p not in current]
+	removed = [p for p in current if p not in people]
+	if not added and not removed:
+		return False
+	for p in added:
+		_check_person(p, user, caps, kind)
+	if removed and user not in (task.owner,) and "team_view" not in caps and set(removed) - {user}:
+		raise frappe.PermissionError("Only the person who set up this meeting can remove others.")
+	if not task.get("hm_meeting_group"):
+		task.db_set("hm_meeting_group", str(task.name), update_modified=False)
+	for p in added:
+		_copy_for(task, p)
+	for p in removed:
+		doc = current[p]
+		frappe.db.delete("Sales Activity History", {"crm_task": doc.name})
+		frappe.delete_doc("CRM Task", doc.name, ignore_permissions=True, force=True)
+	return True
 
 
 def set_status(user: str, task_id, status: str, outcome=None, notes=None):
@@ -359,6 +506,15 @@ def set_status(user: str, task_id, status: str, outcome=None, notes=None):
 			task.hm_completion_notes = notes
 	task.flags.hm_reason = notes
 	task.save(ignore_permissions=True)
+	if target in ("Done", "Canceled"):
+		# One meeting: done / cancelled for everyone in it.
+		for other in siblings(task):
+			other.status = target
+			if target == "Done":
+				other.hm_outcome = task.get("hm_outcome")
+				other.hm_completion_notes = task.get("hm_completion_notes")
+			other.flags.hm_reason = notes
+			other.save(ignore_permissions=True)
 	return task, True
 
 
@@ -387,6 +543,7 @@ def reschedule(user: str, task_id, new_start, new_end=None, reason=None):
 	task.hm_end_datetime = end
 	task.flags.hm_reason = reason
 	task.save(ignore_permissions=True)
+	_sync_siblings(task, reason)
 	return task, True
 
 
@@ -463,9 +620,16 @@ def update_details(user: str, task_id, values: dict):
 			task.hm_end_datetime = end
 			changed = True
 
+	reason = (values.get("reason") or "").strip()[:2000] or None
 	if changed:
-		task.flags.hm_reason = (values.get("reason") or "").strip()[:2000] or None
+		task.flags.hm_reason = reason
 		task.save(ignore_permissions=True)
+		_sync_siblings(task, reason)
+	if values.get("people") is not None and not task.get("hm_trial_booking"):
+		if set_people(user, task, parse_people(values["people"]), reason):
+			changed = True
+			if frappe.db.exists("CRM Task", task.name):
+				task.reload()
 	return task, changed
 
 
