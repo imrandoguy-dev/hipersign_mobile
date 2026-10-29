@@ -310,6 +310,7 @@ def serialize(doc, me: str | None = None) -> dict:
 		"reminders": reminder_offsets(doc),
 		"own_reminders": bool((doc.get("reminders") or "").strip()),
 		"customer": doc.customer,
+		"customer_name": frappe.db.get_value("Customer", doc.customer, "customer_name") if doc.customer else None,
 		"project": doc.get("project_name"),
 		"completed_on": timeutil.to_iso(doc.completed_on),
 		"deadline_changes": cint(doc.deadline_changes),
