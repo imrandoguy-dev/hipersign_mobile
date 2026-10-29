@@ -103,17 +103,18 @@ class TestAccess(Base):
 		r = call(calendar.get_my_day, self.mgr, user=self.s1)  # manager has team_view
 		self.assertTrue(r["success"])
 
-	def test_cannot_create_activity_for_someone_else(self):
+	def test_can_assign_activity_to_a_colleague(self):
 		r = call(
 			activities.create_activity,
 			self.s2,
-			title="Sneaky",
+			title="For a colleague",
 			reference_doctype="Customer",
 			reference_name=self.cust,
 			start=future(1).isoformat(),
 			assigned_to=self.s1,
 		)
-		self.assertEqual(r["_http_status"], 403)
+		self.assertTrue(r["success"], r)
+		self.assertEqual(r["data"]["activity"]["assigned_to"], self.s1)
 
 
 # ------------------------------------------------------------------ Calendar & activities

@@ -68,9 +68,10 @@ class TestMeetingPeople(TestCase):
 		n = call_targets.meetings_assigned(self.sales, now - frappe.utils.datetime.timedelta(hours=1), now + frappe.utils.datetime.timedelta(hours=1))
 		self.assertEqual(n, 1)
 
-	def test_follow_up_for_others_needs_manager(self):
+	def test_follow_up_for_several_people(self):
 		r = self._meeting([self.sales, self.sales2], kind="Follow-up")
-		self.assertFalse(r["success"])
+		self.assertTrue(r["success"], r)
+		self.assertEqual(set(self._copies(r["data"]["activity"]["id"])), {self.sales, self.sales2})
 
 	def test_reschedule_and_complete_apply_to_everyone(self):
 		r = self._meeting([self.sales, self.sales2])

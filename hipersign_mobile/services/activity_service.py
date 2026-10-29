@@ -386,9 +386,7 @@ def parse_people(value) -> list[str]:
 def _check_person(person: str, user: str, caps: set, kind: str):
 	if person == user:
 		return
-	# Anyone can invite colleagues to a meeting; follow-ups for others need a manager.
-	if kind != "Meeting" and "assign_others" not in caps:
-		raise frappe.PermissionError("You can only create follow-ups for yourself.")
+	# Anyone can add colleagues to a meeting or a follow-up.
 	if not frappe.db.get_value("User", person, "enabled"):
 		raise frappe.ValidationError(f"{person} is not an active user.")
 
