@@ -95,8 +95,13 @@ class TestInvoices(TestCase):
 		self.assertTrue(r2["success"], r2)
 		self.assertEqual(r2["data"]["customer"], customer)
 		self.assertFalse(r2["data"]["submitted"])
+		# Paid in full on the spot.
+		r3 = call(invoices.create, self.sales, doctype="CRM Lead", name=lead, company=self.company,
+				  items=[{"code": self.item, "qty": 1, "rate": 700}], paid_amount="full", mode_of_payment="Cash")
+		self.assertTrue(r3["success"], r3)
+		self.assertEqual((r3["data"]["status"], r3["data"]["outstanding"]), ("Paid", 0))
 		d = call(customers.get_detail, self.sales, doctype="CRM Lead", name=lead)["data"]
-		self.assertEqual({x["id"] for x in d["journey"]["invoices"]}, {r["data"]["id"], r2["data"]["id"]})
+		self.assertEqual({x["id"] for x in d["journey"]["invoices"]}, {r["data"]["id"], r2["data"]["id"], r3["data"]["id"]})
 
 	def test_voice_note_on_customer(self):
 		r = call(attachments.list_files, self.sales, doctype="Customer", name=self.customer)

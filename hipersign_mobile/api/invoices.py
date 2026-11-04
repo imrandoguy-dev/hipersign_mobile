@@ -236,10 +236,12 @@ def create(
 	remarks: str | None = None,
 ):
 	"""New invoice: from a quotation (quotation_id) or for a customer / lead / deal with items
-	[{code, qty, rate}]. With paid_amount the payment is recorded too (invoice gets submitted)."""
+	[{code, qty, rate}]. With paid_amount (a number, or "full") the payment is recorded too
+	(the invoice is then submitted)."""
 	me = frappe.session.user
 	_require(me)
-	paid = flt(paid_amount)
+	full = str(paid_amount or "").strip().lower() == "full"  # the whole invoice, taxes included
+	paid = 1 if full else flt(paid_amount)
 	do_submit = str(submit).lower() in ("1", "true", "yes") or paid > 0
 	if quotation_id:
 		perms.require("quotations", me)
@@ -283,7 +285,7 @@ def create(
 		inv.add_comment("Info", f"Made in Hipersign by {frappe.utils.get_fullname(me)}"
 						+ (f" from quotation {quotation_id}" if quotation_id else ""))
 		if paid > 0:
-			_pay(inv, paid, mode_of_payment, reference_no, me)
+			_pay(inv, flt(inv.grand_total) if full else paid, mode_of_payment, reference_no, me)
 			inv.reload()
 	return serialize(inv, full=True)
 
