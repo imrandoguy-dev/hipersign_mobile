@@ -14,7 +14,10 @@ from hipersign_mobile.api._common import choice, mobile_api, require_str
 from hipersign_mobile.services import permissions as perms
 from hipersign_mobile.services import timeutil
 
-DOCTYPES = ("Development Task", "Team Task", "Trial Booking", "Hipersign Feedback", "Hipersign Concern")
+DOCTYPES = (
+	"Development Task", "Team Task", "Trial Booking", "Hipersign Feedback", "Hipersign Concern",
+	"Customer", "CRM Lead", "CRM Deal",  # voice notes / files on a customer
+)
 MAX_MB = 50  # the web server's own upload limit is about this size too
 AUDIO = ("m4a", "aac", "mp3", "ogg", "opus", "wav", "amr", "3gp")
 IMAGE = ("jpg", "jpeg", "png", "webp", "gif", "heic")
@@ -27,6 +30,9 @@ def _record(doctype: str, name: str, user: str, write: bool = False):
 	name = require_str(name, "Record", 140)
 	if not frappe.db.exists(doctype, name):
 		raise frappe.DoesNotExistError("Not found.")
+	if doctype in perms.PARTY_DOCTYPES:
+		perms.require_party(doctype, name, user)  # raises when not allowed
+		return frappe.get_doc(doctype, name)
 	doc = frappe.get_doc(doctype, name)
 	if doctype in ("Development Task", "Team Task"):
 		from hipersign_mobile.services import development as dev

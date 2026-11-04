@@ -25,6 +25,7 @@ SHORTCUTS = [
 	("Development", "Development Task", "DocType", "Red"),
 	("Team Tasks", "Team Task", "DocType", "Yellow"),
 	("Daily Reports", "Hipersign Daily Report", "DocType", "Green"),
+	("Call Targets", "Call Target", "DocType", "Orange"),
 	("App Settings", "Hipersign Mobile Settings", "DocType", "Grey"),
 ]
 
@@ -76,7 +77,6 @@ SECTIONS = [
 		[
 			("Team Tasks", "Team Task", "DocType", "list-checks"),
 			("Daily Reports", "Hipersign Daily Report", "DocType", "clipboard-list"),
-			("Call Targets", "Call Target", "DocType", "target"),
 			("App Suggestions", "Hipersign Feedback", "DocType", "lightbulb"),
 			("Concerns (private)", "Hipersign Concern", "DocType", "shield-alert"),
 		],
@@ -86,6 +86,7 @@ SECTIONS = [
 		"settings",
 		[
 			("App Settings", "Hipersign Mobile Settings", "DocType", "settings"),
+			("Call Targets", "Call Target", "DocType", "target"),
 			("Phones", "Mobile Device", "DocType", "smartphone"),
 			("Notifications", "Mobile Notification", "DocType", "bell"),
 			("Notification Preferences", "Mobile User Preference", "DocType", "bell-ring"),

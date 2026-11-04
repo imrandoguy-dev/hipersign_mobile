@@ -197,6 +197,7 @@ def setup():
 	add_indexes()
 	add_whatsapp_template_field()
 	add_quotation_lead_field()
+	add_customer_lead_field()
 	default_quotation_company()
 	add_shift_break_fields()
 	backfill_trial_periods()
@@ -350,6 +351,29 @@ def add_quotation_lead_field():
 					"read_only": 1,
 					"search_index": 1,
 					"description": "Made by Hipersign for a quotation to this CRM lead.",
+				}
+			]
+		},
+		update=True,
+	)
+
+
+def add_customer_lead_field():
+	"""Invoices to a CRM Lead go to a Customer made for it (once); this links the two."""
+	if not frappe.db.exists("DocType", "Customer"):
+		return
+	create_custom_fields(
+		{
+			"Customer": [
+				{
+					"fieldname": "hm_crm_lead",
+					"fieldtype": "Link",
+					"label": "CRM Lead",
+					"options": "CRM Lead",
+					"insert_after": "customer_name",
+					"read_only": 1,
+					"search_index": 1,
+					"description": "The CRM lead this customer came from (set by Hipersign).",
 				}
 			]
 		},

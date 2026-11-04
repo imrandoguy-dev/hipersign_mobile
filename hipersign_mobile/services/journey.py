@@ -53,6 +53,13 @@ def related(doctype: str, name: str) -> dict[str, set[str]]:
 					out["CRM Deal"].add(d)
 			for deal in list(out["CRM Deal"]):
 				out["Customer"] |= set(frappe.get_all("Customer", filters={"crm_deal": deal}, pluck="name"))
+		if _has("Customer", "hm_crm_lead"):
+			for lead in list(out["CRM Lead"]):
+				out["Customer"] |= set(frappe.get_all("Customer", filters={"hm_crm_lead": lead}, pluck="name"))
+			for c in list(out["Customer"]):
+				lead = frappe.db.get_value("Customer", c, "hm_crm_lead")
+				if lead:
+					out["CRM Lead"].add(lead)
 	return {k: {v for v in vals if v} for k, vals in out.items()}
 
 
@@ -254,4 +261,23 @@ def journey(doctype: str, name: str) -> dict:
 		{"id": q.name, "status": q.status, "date": str(q.transaction_date), "total": q.grand_total, "currency": q.currency,
 		 "total_text": frappe.utils.fmt_money(q.grand_total, currency=q.currency)}
 		for q in quotes[:10]
-	]}
+	], "invoices": _invoices(rel)}
+
+
+def _invoices(rel) -> list:
+	if not rel["Customer"] or not _has("Sales Invoice"):
+		return []
+	rows = frappe.get_all(
+		"Sales Invoice",
+		filters={"customer": ["in", list(rel["Customer"])], "docstatus": ["<", 2]},
+		fields=["name", "status", "docstatus", "posting_date", "grand_total", "outstanding_amount", "currency"],
+		order_by="posting_date desc, creation desc",
+		limit=10,
+	)
+	return [
+		{"id": r.name, "status": "Draft" if r.docstatus == 0 else r.status, "date": str(r.posting_date),
+		 "total": r.grand_total, "outstanding": r.outstanding_amount, "currency": r.currency,
+		 "total_text": frappe.utils.fmt_money(r.grand_total, currency=r.currency),
+		 "outstanding_text": frappe.utils.fmt_money(r.outstanding_amount, currency=r.currency)}
+		for r in rows
+	]

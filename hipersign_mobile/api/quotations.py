@@ -65,6 +65,10 @@ def _last(user: str) -> frappe._dict:
 def options():
 	me = frappe.session.user
 	_require(me)
+	return company_options(me)
+
+
+def company_options(me: str) -> dict:
 	last = _last(me)
 	companies = frappe.get_all("Company", fields=["name", "default_currency"], order_by="name asc")
 	default = (
@@ -128,6 +132,63 @@ def items(query: str | None = None, company: str | None = None):
 			for r in rows
 		],
 	}
+
+
+def parse_lines(items) -> list:
+	if isinstance(items, str):
+		items = frappe.parse_json(items)
+	rows = [r for r in (items or []) if r and (r.get("code") or r.get("item_code"))]
+	if not rows:
+		raise frappe.ValidationError("Add at least one item.")
+	return rows
+
+
+def fill_lines(doc, company: str, rows: list, taxes: str | None):
+	"""Currency, price list, items and tax template on a Quotation / Sales Invoice."""
+	doc.currency = frappe.get_cached_value("Company", company, "default_currency")
+	doc.conversion_rate = 1
+	pl = _price_list_for(company)
+	if pl:
+		doc.selling_price_list = pl
+		doc.price_list_currency = frappe.db.get_value("Price List", pl, "currency") or doc.currency
+		doc.plc_conversion_rate = 1 if doc.price_list_currency == doc.currency else None
+	for r in rows:
+		code = r.get("code") or r.get("item_code")
+		if not frappe.db.exists("Item", code):
+			raise frappe.ValidationError(f"Item {code} not found.")
+		qty = flt(r.get("qty")) or 1
+		if qty <= 0:
+			raise frappe.ValidationError("Quantity must be more than 0.")
+		rate = flt(r.get("rate"))
+		if rate < 0:
+			raise frappe.ValidationError("Price can't be negative.")
+		row = {"item_code": code, "qty": qty, "rate": rate, "price_list_rate": rate}
+		desc = optional_str(r.get("description"), 2000)
+		if desc:
+			row["description"] = desc
+		doc.append("items", row)
+	if taxes:
+		if not frappe.db.exists("Sales Taxes and Charges Template", {"name": taxes, "company": company}):
+			raise frappe.ValidationError("This tax template is not for the chosen company.")
+		doc.taxes_and_charges = taxes
+		from erpnext.controllers.accounts_controller import _get_taxes_and_charges
+
+		for t in _get_taxes_and_charges("Sales Taxes and Charges Template", taxes) or []:
+			doc.append("taxes", t)
+
+
+def price_lines(doc, rows: list):
+	"""ERPNext's own defaults (addresses, accounts, totals), keeping the prices typed in the app.
+	Call inside _as_admin()."""
+	doc.run_method("set_missing_values")
+	for i in doc.items:  # set_missing_values may load list prices
+		r = next((x for x in rows if (x.get("code") or x.get("item_code")) == i.item_code), None)
+		if r is not None:
+			i.rate = flt(r.get("rate"))
+			i.price_list_rate = i.rate
+			i.discount_percentage = 0
+			i.discount_amount = 0
+	doc.calculate_taxes_and_totals()
 
 
 def erp_lead_for(crm_lead: str) -> str:
@@ -257,11 +318,7 @@ def create(
 	company = require_str(company, "Company", 140)
 	if not frappe.db.exists("Company", company):
 		raise frappe.ValidationError("Choose the company.")
-	if isinstance(items, str):
-		items = frappe.parse_json(items)
-	rows = [r for r in (items or []) if r and (r.get("code") or r.get("item_code"))]
-	if not rows:
-		raise frappe.ValidationError("Add at least one item.")
+	rows = parse_lines(items)
 	to, party = _quotation_party(doctype, name)
 	q = frappe.new_doc("Quotation")
 	q.quotation_to = to
@@ -270,50 +327,11 @@ def create(
 	q.transaction_date = nowdate()
 	q.valid_till = add_days(nowdate(), max(cint(valid_days) or 30, 1))
 	q.order_type = "Sales"
-	q.currency = frappe.get_cached_value("Company", company, "default_currency")
-	q.conversion_rate = 1
-	pl = _price_list_for(company)
-	if pl:
-		q.selling_price_list = pl
-		q.price_list_currency = frappe.db.get_value("Price List", pl, "currency") or q.currency
-		q.plc_conversion_rate = 1 if q.price_list_currency == q.currency else None
-	for r in rows:
-		code = r.get("code") or r.get("item_code")
-		if not frappe.db.exists("Item", code):
-			raise frappe.ValidationError(f"Item {code} not found.")
-		qty = flt(r.get("qty")) or 1
-		if qty <= 0:
-			raise frappe.ValidationError("Quantity must be more than 0.")
-		rate = flt(r.get("rate"))
-		if rate < 0:
-			raise frappe.ValidationError("Price can't be negative.")
-		row = {"item_code": code, "qty": qty, "rate": rate, "price_list_rate": rate}
-		desc = optional_str(r.get("description"), 2000)
-		if desc:
-			row["description"] = desc
-		q.append("items", row)
 	if terms:
 		q.terms = optional_str(terms, 10000)
-	if taxes:
-		if not frappe.db.exists("Sales Taxes and Charges Template", {"name": taxes, "company": company}):
-			raise frappe.ValidationError("This tax template is not for the chosen company.")
-		q.taxes_and_charges = taxes
-		from erpnext.controllers.accounts_controller import _get_taxes_and_charges
-
-		for t in _get_taxes_and_charges("Sales Taxes and Charges Template", taxes) or []:
-			q.append("taxes", t)
-	# ERPNext fills addresses, taxes and totals with the user's desk permissions; salespeople
-	# may not have those, so this part runs as Administrator and the quotation is theirs after.
+	fill_lines(q, company, rows, taxes)
 	with _as_admin():
-		q.run_method("set_missing_values")
-		for i in q.items:  # keep the price typed in the app (set_missing_values may load list prices)
-			r = next((x for x in rows if (x.get("code") or x.get("item_code")) == i.item_code), None)
-			if r is not None:
-				i.rate = flt(r.get("rate"))
-				i.price_list_rate = i.rate
-				i.discount_percentage = 0
-				i.discount_amount = 0
-		q.calculate_taxes_and_totals()
+		price_lines(q, rows)
 		q.flags.ignore_permissions = True
 		q.insert()
 		if str(submit).lower() in ("1", "true", "yes"):
