@@ -11,9 +11,11 @@ from hipersign_mobile.services import settings as hm_settings
 LIST_BUCKETS = ("Pending", "Completed", "Rescheduled", "Cancelled", "Open")
 
 
-def _list(types, status, start_date, end_date, cursor, page_size, cap):
+def _list(types, status, start_date, end_date, cursor, page_size, cap, person=None):
+	"""person: None = mine; managers can pass "all" (everyone) or one user."""
 	me = frappe.session.user
 	perms.require(cap, me)
+	person = optional_str(person, 140)
 	bucket = choice(status, LIST_BUCKETS, "status", default="Pending")
 	start = end = None
 	if start_date:
@@ -35,11 +37,25 @@ def _list(types, status, start_date, end_date, cursor, page_size, cap):
 		offset=offset,
 		limit=limit,
 		order_by=order,
+		for_user=person,
 	)
+	more = len(rows) > limit
+	rows = rows[:limit]
+	if person == "all":
+		# A meeting with several people has a copy each: show it once.
+		seen, kept = set(), []
+		for r in rows:
+			g = r.get("hm_meeting_group")
+			if g and g in seen:
+				continue
+			if g:
+				seen.add(g)
+			kept.append(r)
+		rows = kept
 	today_start = timeutil.user_today_start(me)
 	cc = hm_settings.get().default_country_code
-	items = [svc.serialize(r, today_start, cc=cc) for r in rows[:limit]]
-	return page_result(items, offset, limit, len(rows) > limit)
+	items = [svc.serialize(r, today_start, cc=cc) for r in rows]
+	return page_result(items, offset, limit, more)
 
 
 @mobile_api(methods=("GET",))
@@ -49,8 +65,9 @@ def get_followups(
 	end_date: str | None = None,
 	cursor: str | int | None = None,
 	page_size: str | int | None = None,
+	person: str | None = None,
 ):
-	return _list(["Follow-up"], status, start_date, end_date, cursor, page_size, "followups")
+	return _list(["Follow-up"], status, start_date, end_date, cursor, page_size, "followups", person)
 
 
 @mobile_api(methods=("GET",))
@@ -60,8 +77,9 @@ def get_meetings(
 	end_date: str | None = None,
 	cursor: str | int | None = None,
 	page_size: str | int | None = None,
+	person: str | None = None,
 ):
-	return _list(["Meeting", "Trial"], status, start_date, end_date, cursor, page_size, "meetings")
+	return _list(["Meeting", "Trial"], status, start_date, end_date, cursor, page_size, "meetings", person)
 
 
 @mobile_api(methods=("GET",))

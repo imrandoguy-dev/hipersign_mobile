@@ -123,3 +123,18 @@ class TestMeetingPeople(TestCase):
 		r = call(activities.people, self.sales)
 		self.assertTrue(r["success"], r)
 		self.assertIn(self.sales2, [p["id"] for p in r["data"]["items"]])
+
+	def test_manager_sees_everyones_meetings_once(self):
+		r = self._meeting([self.sales, self.sales2])
+		aid = r["data"]["activity"]["id"]
+		mine = call(activities.get_meetings, self.manager)["data"]["items"]
+		self.assertNotIn(aid, [a["id"] for a in mine])
+		every = call(activities.get_meetings, self.manager, person="all")
+		self.assertTrue(every["success"], every)
+		ids = [a.get("meeting_group") or a["id"] for a in every["data"]["items"]]
+		group = frappe.db.get_value("CRM Task", aid, "hm_meeting_group")
+		self.assertEqual(ids.count(group), 1)
+		one = call(activities.get_meetings, self.manager, person=self.sales2)["data"]["items"]
+		self.assertTrue(all(a["assigned_to"] == self.sales2 for a in one) and one)
+		# A salesperson can't look at everyone's.
+		self.assertFalse(call(activities.get_meetings, self.sales, person="all")["success"])

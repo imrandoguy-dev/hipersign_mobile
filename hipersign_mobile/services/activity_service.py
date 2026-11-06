@@ -170,6 +170,8 @@ def _scope_filters(user: str, caps: set[str], for_user: str | None = None) -> di
 	if for_user and for_user != user:
 		if "team_view" not in caps:
 			raise frappe.PermissionError("You can only see your own activities.")
+		if for_user == "all":
+			return {}  # everyone's
 		return {"assigned_to": for_user}
 	return {"assigned_to": user}
 
@@ -218,10 +220,10 @@ def list_activities(
 		conditions.append(["due_date", "<", end])
 
 	base = [[k, *(v if isinstance(v, list) else ["=", v])] for k, v in filters.items() if k != "assigned_to"]
-	person = filters["assigned_to"]
+	person = filters.get("assigned_to")  # None = everyone (managers)
 	rows = frappe.get_all(
 		"CRM Task",
-		filters=base + [["assigned_to", "=", person]] + conditions,
+		filters=base + ([["assigned_to", "=", person]] if person else [["assigned_to", "is", "set"]]) + conditions,
 		or_filters=filters_or,
 		fields=task_fields(),
 		order_by=order_by,
@@ -229,7 +231,7 @@ def list_activities(
 	)
 	# Trials / trainings the person gives as trainer (booked by someone else) are on her
 	# calendar too - same activity record, so both see the same status.
-	trainer_tasks = trainer_task_names(person, start, end)
+	trainer_tasks = trainer_task_names(person, start, end) if person else set()
 	if trainer_tasks:
 		seen = {r.name for r in rows}
 		extra = frappe.get_all(
