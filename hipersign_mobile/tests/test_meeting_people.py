@@ -138,3 +138,29 @@ class TestMeetingPeople(TestCase):
 		self.assertTrue(all(a["assigned_to"] == self.sales2 for a in one) and one)
 		# A salesperson can't look at everyone's.
 		self.assertFalse(call(activities.get_meetings, self.sales, person="all")["success"])
+
+	def test_voice_notes_on_meeting_and_customer_page(self):
+		from hipersign_mobile.api import attachments
+		from hipersign_mobile.tests.test_team_features import _with_file
+
+		r = self._meeting([self.sales, self.sales2])
+		aid = r["data"]["activity"]["id"]
+		lead = r["data"]["activity"]["reference"]["name"]
+		theirs = self._copies(aid)[self.sales2].name
+		# The invited person adds a voice note; the organiser sees it on their copy.
+		with _with_file("rec.m4a", b"voice-bytes"):
+			up = call(attachments.upload, self.sales2, doctype="CRM Task", name=theirs, voice=1)
+		self.assertTrue(up["success"], up)
+		mine = call(attachments.list_files, self.sales, doctype="CRM Task", name=aid)
+		self.assertEqual([f["id"] for f in mine["data"]["items"]], [up["data"]["id"]])
+		# And on the lead's page, under Meetings; plus a note on the lead itself under Customer.
+		with _with_file("lead.m4a", b"lead-voice"):
+			own = call(attachments.upload, self.sales, doctype="CRM Lead", name=lead, voice=1)
+		self.assertTrue(own["success"], own)
+		res = call(attachments.customer_files, self.manager, doctype="CRM Lead", name=lead)
+		self.assertTrue(res["success"], res)
+		secs = {s["title"]: [i["id"] for i in s["items"]] for s in res["data"]["sections"]}
+		self.assertEqual(secs.get("Meetings"), [up["data"]["id"]])
+		self.assertEqual(secs.get("Customer"), [own["data"]["id"]])
+		# Someone outside the meeting can't open it directly.
+		self.assertFalse(call(attachments.list_files, make_user("trainer"), doctype="CRM Task", name=aid)["success"])
