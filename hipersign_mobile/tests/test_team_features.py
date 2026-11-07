@@ -341,6 +341,22 @@ class TestTeamFeatures(TestCase):
 
 	# ------------------------------------------------------------ daily report
 
+	def test_daily_report_timeline_busy_and_free(self):
+		day = timeutil.now_system().date() - dt.timedelta(days=1)
+		base = dt.datetime.combine(day, dt.time(0, 0))
+		self._log_calls(3, base.replace(hour=10))  # 10:00, 10:01, 10:02 (30 s each)
+		self._log_calls(2, base.replace(hour=14), call_type="Follow-up")
+		make_task(self.caller, base.replace(hour=16), title="Demo meeting", ref=("Customer", self.customer))
+		frappe.db.set_value("CRM Task", {"assigned_to": self.caller, "title": "Demo meeting"}, "hm_activity_type", "Meeting")
+		frappe.db.commit()
+		t = daily_report.build(self.caller, day)["timeline"]
+		self.assertEqual(len(t["calls"]), 5)
+		self.assertEqual([(b["from"], b["to"]) for b in t["blocks"]], [("4:00 PM", "5:00 PM")])
+		free = [(f["from"], f["to"]) for f in t["free"]]
+		self.assertEqual(free, [("9:30 AM", "10:00 AM"), ("10:05 AM", "2:00 PM"), ("2:04 PM", "4:00 PM"), ("5:00 PM", "6:30 PM")])
+		self.assertEqual(t["busy_minutes"], 5 + 4 + 60)
+		self.assertEqual(t["longest_free"], 235)
+
 	def test_daily_report(self):
 		now = timeutil.now_system()
 		day = now.date()

@@ -55,7 +55,7 @@ def build(user: str, day: dt.date) -> dict:
 
 	# Follow-ups / meetings / trials due that day (own, and trainings given as trainer).
 	fields = ["name", "title", "status", "due_date", "hm_activity_type", "reference_doctype", "reference_docname",
-		"hm_completed_at", "hm_trial_booking", "hm_outcome"]
+		"hm_completed_at", "hm_trial_booking", "hm_outcome", "hm_end_datetime"]
 	meta = frappe.get_meta("CRM Task")
 	fields = [f for f in fields if f == "name" or meta.has_field(f)]
 	due = frappe.get_all(
@@ -152,6 +152,8 @@ def build(user: str, day: dt.date) -> dict:
 				"reference_name": r.name,
 			})
 
+	timeline = build_timeline(user, day, start, end, tz, due, items)
+
 	st = call_targets.call_stats(user, start, end)
 	made, connected = st.made, st.connected
 	meetings = call_targets.meetings_assigned(user, start, end)
@@ -176,6 +178,106 @@ def build(user: str, day: dt.date) -> dict:
 		"meetings_assigned": meetings,
 		"meeting_target": cint(target.get("meeting_target")) if target else None,
 		"call_target": cint(target.daily_target) if target else None,
+		"timeline": timeline,
+	}
+
+
+# ---------------------------------------------------------------- the day as a line: busy / free
+
+DEFAULT_MINUTES = {"Meeting": 60, "Trial": 60, "Follow-up": 15}
+CALL_WRAP = 2  # minutes after a call (notes, dialling the next one)
+
+
+def _mins(d: dt.datetime) -> int:
+	return d.hour * 60 + d.minute
+
+
+def _hhmm(m: int) -> str:
+	return _fmt_time(dt.datetime.combine(dt.date.today(), dt.time(min(m, 1439) // 60, min(m, 1439) % 60)))
+
+
+def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: list) -> dict:
+	"""Work hours of the day with what filled them (meetings, follow-ups, trainings, calls) and
+	the free gaps in between. Minutes are from local midnight."""
+	from hipersign_mobile.services import call_targets
+
+	t = call_targets.target_for(user)
+	ws = get_time((t.work_start if t else None) or "09:30:00")
+	we = get_time((t.work_end if t else None) or "18:30:00")
+	gap = cint(t.idle_minutes) if t and t.get("idle_minutes") else 0
+	gap = gap if gap > 0 else 20  # shorter gaps are not counted as free time
+	w0, w1 = ws.hour * 60 + ws.minute, we.hour * 60 + we.minute
+
+	blocks = []
+	for r in tasks:
+		if r.status == "Canceled" or not r.due_date:
+			continue
+		a = _local(r.due_date, tz)
+		if not a or a.date() != day:
+			continue
+		kind = r.get("hm_activity_type") or "Follow-up"
+		b = _local(r.get("hm_end_datetime"), tz) if r.get("hm_end_datetime") else None
+		f, to = _mins(a), (_mins(b) if b and b.date() == day and b > a else _mins(a) + DEFAULT_MINUTES.get(kind, 15))
+		label = r.title or kind
+		blocks.append({"kind": kind.lower().replace("-", ""), "from_min": f, "to_min": min(to, 1440), "label": label,
+			"done": r.status == "Done"})
+
+	calls = []
+	for c in frappe.get_all(
+		"Mobile Call Log",
+		filters=[["caller", "=", user], ["call_datetime", ">=", start], ["call_datetime", "<", end]],
+		fields=["call_datetime", "connected", "duration_seconds", "direction", "party_name", "phone"],
+		order_by="call_datetime asc",
+		limit=2000,
+	):
+		a = _local(c.call_datetime, tz)
+		m = _mins(a)
+		dur = cint(c.duration_seconds)
+		calls.append({"at_min": m, "at": _fmt_time(a), "connected": bool(cint(c.connected)), "seconds": dur,
+			"incoming": c.direction == "Incoming", "who": c.party_name or c.phone or ""})
+
+	# Busy = tasks + calls (each call: its length + a little wrap-up).
+	spans = [(b["from_min"], b["to_min"]) for b in blocks]
+	spans += [(c["at_min"], c["at_min"] + max(1, -(-c["seconds"] // 60)) + CALL_WRAP) for c in calls]
+	spans.sort()
+	merged = []
+	for f, to in spans:
+		if merged and f <= merged[-1][1]:
+			merged[-1][1] = max(merged[-1][1], to)
+		else:
+			merged.append([f, to])
+
+	lo = min([w0] + [f for f, _ in merged])
+	hi = max([w1] + [to for _, to in merged])
+	now_local = dt.datetime.now(tz).replace(tzinfo=None)
+	until = hi if day < now_local.date() else (min(hi, max(lo, _mins(now_local))) if day == now_local.date() else lo)
+
+	# Free = gaps inside work hours (and only up to now, for today).
+	free = []
+	cursor = w0
+	for f, to in merged + [[w1, w1]]:
+		f2, to2 = max(f, w0), min(to, w1)
+		end_gap = min(f2, until, w1)
+		if end_gap - cursor >= gap:
+			free.append({"from_min": cursor, "to_min": end_gap, "from": _hhmm(cursor), "to": _hhmm(end_gap), "minutes": end_gap - cursor})
+		cursor = max(cursor, to2)
+	busy = sum(max(0, min(to, w1, until) - max(f, w0)) for f, to in merged)
+
+	for b in blocks:
+		b["from"], b["to"] = _hhmm(b["from_min"]), _hhmm(b["to_min"])
+	marks = []
+	for i in items:  # tasks / development finished that day: a mark at the time
+		if i["done"] and i["reference_doctype"] in ("Team Task", "Development Task"):
+			when = frappe.db.get_value(i["reference_doctype"], i["reference_name"], "completed_on")
+			w = _local(when, tz) if when else None
+			if w and w.date() == day:
+				marks.append({"at_min": _mins(w), "at": _fmt_time(w), "label": f"{i['kind']}: {i['title']} done"})
+	return {
+		"start_min": lo, "end_min": hi, "work_start_min": w0, "work_end_min": w1,
+		"start": _hhmm(lo), "end": _hhmm(hi), "until_min": until,
+		"blocks": blocks, "calls": calls, "marks": marks, "free": free,
+		"busy_minutes": busy, "free_minutes": sum(f["minutes"] for f in free),
+		"longest_free": max((f["minutes"] for f in free), default=0), "min_gap": gap,
 	}
 
 
