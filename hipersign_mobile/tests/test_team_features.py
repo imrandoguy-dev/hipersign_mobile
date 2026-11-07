@@ -357,9 +357,10 @@ class TestTeamFeatures(TestCase):
 		self.assertEqual(len(t["calls"]), 5)
 		self.assertEqual([(b["from"], b["to"]) for b in t["blocks"]], [("4:00 PM", "5:00 PM")])
 		free = [(f["from"], f["to"]) for f in t["free"]]
-		self.assertEqual(free, [("9:30 AM", "10:00 AM"), ("10:05 AM", "2:00 PM"), ("2:04 PM", "4:00 PM"), ("5:00 PM", "6:30 PM")])
+		# Lunch (1-2 PM by default) is not free time.
+		self.assertEqual(free, [("9:30 AM", "10:00 AM"), ("10:05 AM", "1:00 PM"), ("2:04 PM", "4:00 PM"), ("5:00 PM", "6:30 PM")])
 		self.assertEqual(t["busy_minutes"], 5 + 4 + 60)
-		self.assertEqual(t["longest_free"], 235)
+		self.assertEqual(t["longest_free"], 175)
 
 	def test_daily_report_timeline_uses_check_in_and_out(self):
 		from hipersign_mobile.tests.utils import ensure_company
@@ -389,11 +390,40 @@ class TestTeamFeatures(TestCase):
 		frappe.db.commit()
 		t = daily_report.build(self.caller, day)["timeline"]
 		self.assertEqual((t["source"], t["check_in"], t["check_out"]), ("check-in", "9:50 AM", "5:20 PM"))
-		self.assertEqual(t["at_work_minutes"], 450)
+		self.assertEqual(t["at_work_minutes"], 450 - 60)  # without lunch
 		self.assertTrue(t["calls_summary"].startswith("5 calls, "), t["calls_summary"])
-		self.assertIn("in 7h 30m (calling 10:00 AM - 2:01 PM)", t["calls_summary"])
+		self.assertIn("in 6h 30m (calling 10:00 AM - 2:01 PM)", t["calls_summary"])
 		free = [(f["from"], f["to"]) for f in t["free"]]
-		self.assertEqual(free, [("10:05 AM", "2:00 PM"), ("2:04 PM", "5:20 PM")])
+		self.assertEqual(free, [("10:05 AM", "1:00 PM"), ("2:04 PM", "5:20 PM")])
+
+	def test_daily_report_timeline_lunch_and_incoming(self):
+		day = timeutil.now_system().date() - dt.timedelta(days=5)
+		base = dt.datetime.combine(day, dt.time(0, 0))
+		frappe.set_user("Administrator")
+		self._log_calls(2, base.replace(hour=11))
+		self._log_calls(1, base.replace(hour=15))
+		frappe.get_last_doc("Mobile Call Log", filters={"caller": self.caller}).db_set("direction", "Incoming")
+		frappe.db.commit()
+		t = daily_report.build(self.caller, day)["timeline"]
+		self.assertEqual(t["lunch"]["from"], "1:00 PM")  # default lunch break
+		for f in t["free"]:  # lunch is never free time
+			self.assertTrue(f["to_min"] <= 13 * 60 or f["from_min"] >= 14 * 60, f)
+		self.assertTrue(t["calls_summary"].startswith("2 calls, "), t["calls_summary"])
+		self.assertIn("+", t["calls_summary"])  # the incoming one is listed separately
+
+	def test_daily_report_counts_calls_like_the_target(self):
+		from hipersign_mobile.services import call_targets
+
+		day = timeutil.now_system().date() - dt.timedelta(days=7)
+		base = dt.datetime.combine(day, dt.time(11, 0))
+		self._log_calls(4, base)  # not connected
+		frappe.db.commit()
+		t = call_targets.target_for(self.caller)
+		r = daily_report.build(self.caller, day)
+		self.assertEqual(r["calls_made"], 4)
+		if t and t.count_connected_only:
+			self.assertEqual(r["call_counted"], 0)  # none connected: nothing towards the target
+		self.assertTrue(r["call_unit"])
 
 	def test_daily_report(self):
 		now = timeutil.now_system()

@@ -178,6 +178,9 @@ def build(user: str, day: dt.date) -> dict:
 		"meetings_assigned": meetings,
 		"meeting_target": cint(target.get("meeting_target")) if target else None,
 		"call_target": cint(target.daily_target) if target else None,
+		# What counts towards the target, the way it is set in ERP (e.g. only new connected calls).
+		"call_counted": _counted(st, target),
+		"call_unit": call_targets.count_unit(bool(cint(target.get("count_connected_only"))), bool(cint(target.get("count_new_only")))) if target else "calls",
 		"timeline": timeline,
 	}
 
@@ -194,6 +197,13 @@ def _mins(d: dt.datetime) -> int:
 
 def _hhmm(m: int) -> str:
 	return _fmt_time(dt.datetime.combine(dt.date.today(), dt.time(min(m, 1439) // 60, min(m, 1439) % 60)))
+
+
+def _counted(st, target) -> int:
+	if not target:
+		return st.made
+	c, n = cint(target.get("count_connected_only")), cint(target.get("count_new_only"))
+	return (st.new_connected if c else st.new) if n else (st.connected if c else st.made)
 
 
 def _dur(m: int) -> str:
@@ -279,7 +289,18 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 		m = _mins(a)
 		dur = cint(c.duration_seconds)
 		calls.append({"at_min": m, "at": _fmt_time(a), "connected": bool(cint(c.connected)), "seconds": dur,
-			"incoming": c.direction == "Incoming", "who": c.party_name or c.phone or ""})
+			"incoming": c.direction in ("Incoming", "Missed"), "who": c.party_name or c.phone or ""})
+
+	# Lunch break (App Settings) is neither busy nor free.
+	from hipersign_mobile.services import settings as hm_settings
+
+	cfg = hm_settings.get()
+	lunch = None
+	if cfg.get("lunch_break_start") and cfg.get("lunch_break_end"):
+		ls, le = get_time(cfg.lunch_break_start), get_time(cfg.lunch_break_end)
+		lunch = (ls.hour * 60 + ls.minute, le.hour * 60 + le.minute)
+		if lunch[1] <= lunch[0]:
+			lunch = None
 
 	# Busy = tasks + calls (each call: its length + a little wrap-up).
 	spans = [(b["from_min"], b["to_min"]) for b in blocks]
@@ -299,7 +320,9 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 	# Free = gaps inside work hours (and only up to now, for today).
 	free = []
 	cursor = w0
-	for f, to in merged + [[w1, w1]]:
+	# Lunch counts as "taken" so it splits / trims free gaps.
+	taken = sorted(merged + ([[lunch[0], lunch[1]]] if lunch else []))
+	for f, to in taken + [[w1, w1]]:
 		f2, to2 = max(f, w0), min(to, w1)
 		end_gap = min(f2, until, w1)
 		if end_gap - cursor >= gap:
@@ -316,13 +339,20 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 			w = _local(when, tz) if when else None
 			if w and w.date() == day:
 				marks.append({"at_min": _mins(w), "at": _fmt_time(w), "label": f"{i['kind']}: {i['title']} done"})
-	connected = sum(1 for c in calls if c["connected"])
+	made = [c for c in calls if not c["incoming"]]
+	incoming = [c for c in calls if c["incoming"]]
+	connected = sum(1 for c in made if c["connected"])
 	at_work = max(0, min(w1, until) - w0) if until > w0 else 0
+	if lunch:  # time at work without the lunch break
+		at_work -= max(0, min(lunch[1], w1, until) - max(lunch[0], w0))
 	summary = None
 	if calls:
-		summary = f"{len(calls)} call{'s' if len(calls) != 1 else ''}, {connected} connected in {_dur(at_work)}"
-		if calls[0]["at_min"] != calls[-1]["at_min"]:
-			summary += f" (calling {calls[0]['at']} - {calls[-1]['at']})"
+		summary = f"{len(made)} call{'s' if len(made) != 1 else ''}, {connected} connected in {_dur(at_work)}"
+		if len(made) > 1:
+			summary += f" (calling {made[0]['at']} - {made[-1]['at']})"
+		if incoming:
+			got = sum(1 for c in incoming if c["connected"])
+			summary += f" · +{got} incoming" + (f", {len(incoming) - got} missed" if len(incoming) > got else "")
 	return {
 		"source": source,
 		"check_in": _hhmm(att["in"]) if att["in"] is not None else None,
@@ -330,6 +360,7 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 		"at_work_minutes": at_work,
 		"calls_summary": summary,
 		"calls_connected": connected,
+		"lunch": {"from_min": lunch[0], "to_min": lunch[1], "from": _hhmm(lunch[0]), "to": _hhmm(lunch[1])} if lunch else None,
 		"start_min": lo, "end_min": hi, "work_start_min": w0, "work_end_min": w1,
 		"start": _hhmm(lo), "end": _hhmm(hi), "until_min": until,
 		"blocks": blocks, "calls": calls, "marks": marks, "free": free,
