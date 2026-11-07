@@ -267,6 +267,36 @@ def check(t, now: dt.datetime | None = None):
 		f"No calls for {st['text']}",
 		f"Nothing scheduled right now. {p['remaining']} more {unit} needed today ({p['counted']} of {p['target']}).",
 	)
+	_tell_managers(user, st, p, unit, n)
+
+
+def managers_of(user: str) -> list[str]:
+	"""Who hears about someone's idle time: managers and the CEO (not the person themselves)."""
+	from hipersign_mobile.services import permissions as perms
+
+	users = set(
+		frappe.get_all("Has Role", filters={"role": ["in", (perms.ROLE_MANAGER, perms.ROLE_CEO)], "parenttype": "User"}, pluck="parent")
+	)
+	users -= {user, "Administrator", "Guest"}
+	return frappe.get_all("User", filters={"name": ["in", list(users) or [""]], "enabled": 1}, pluck="name")
+
+
+def _tell_managers(user: str, st: dict, p: dict, unit: str, n: int):
+	from hipersign_mobile.notifications import queue
+
+	name = frappe.utils.get_fullname(user)
+	body = f"Today: {p['counted']} of {p['target']} {unit}"
+	try:
+		since = dt.datetime.strptime(st["since"], "%Y%m%d%H%M")
+		body += " · nothing since " + since.strftime("%I:%M %p").lstrip("0")
+	except (KeyError, ValueError):
+		pass
+	for m in managers_of(user):
+		queue.enqueue(
+			m, "Team Alert", f"{name} has not called for {st['text']}", body + ".",
+			dedup_key=f"ct-idle-mgr:{user}:{st['since']}:{n}:{m}"[:140],
+			reference_doctype="Hipersign Daily Report", reference_name=None,
+		)
 
 
 def idle_state(t, p: dict, local: dt.datetime, now_sys: dt.datetime) -> dict | None:

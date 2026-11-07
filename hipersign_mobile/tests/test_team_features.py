@@ -326,6 +326,10 @@ class TestTeamFeatures(TestCase):
 		self.assertIn("6 more calls needed", _notes(self.caller, "Call Target"))
 		# The idle alert at 16:02 too: last call at 10:03 and nothing on the calendar.
 		self.assertTrue(any(x.startswith("No calls for") for x in _notes(self.caller, "Call Target")))
+		# Managers hear about it too, with the caller's name.
+		caller_name = frappe.utils.get_fullname(self.caller)
+		self.assertTrue(any(x.startswith(f"{caller_name} has not called for") for x in _notes(self.manager, "Team Alert")))
+		self.assertFalse(_notes(self.sales, "Team Alert"))
 		# Not while a follow-up is going on.
 		frappe.db.delete("Mobile Notification", {"recipient": self.caller})
 		make_task(self.caller, dt.datetime.combine(day, dt.time(16, 30)), ref=("Customer", self.customer),
