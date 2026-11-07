@@ -361,6 +361,40 @@ class TestTeamFeatures(TestCase):
 		self.assertEqual(t["busy_minutes"], 5 + 4 + 60)
 		self.assertEqual(t["longest_free"], 235)
 
+	def test_daily_report_timeline_uses_check_in_and_out(self):
+		from hipersign_mobile.tests.utils import ensure_company
+
+		day = timeutil.now_system().date() - dt.timedelta(days=3)
+		base = dt.datetime.combine(day, dt.time(0, 0))
+		frappe.set_user("Administrator")
+		emp = frappe.db.get_value("Employee", {"user_id": self.caller}, "name")
+		if not emp:
+			e = frappe.new_doc("Employee")
+			e.update({"first_name": "Caller", "user_id": self.caller, "company": ensure_company(), "status": "Active",
+				"gender": frappe.db.get_value("Gender", {}, "name"), "date_of_birth": "1995-01-01", "date_of_joining": "2024-01-01"})
+			e.flags.ignore_mandatory = True
+			e.insert(ignore_permissions=True)
+			emp = e.name
+		if not frappe.db.table_exists("Employee Checkin"):
+			self.skipTest("HRMS not installed")
+		for at, kind in ((base.replace(hour=9, minute=50), "IN"), (base.replace(hour=17, minute=20), "OUT")):
+			# Raw rows: the test bench may not have the HR app's code.
+			frappe.db.sql(
+				"insert into `tabEmployee Checkin` (name, employee, time, log_type, creation, modified, owner, modified_by, docstatus)"
+				" values (%s, %s, %s, %s, now(), now(), 'Administrator', 'Administrator', 0)",
+				(frappe.generate_hash(length=10), emp, at, kind),
+			)
+		self._log_calls(3, base.replace(hour=10))
+		self._log_calls(2, base.replace(hour=14))
+		frappe.db.commit()
+		t = daily_report.build(self.caller, day)["timeline"]
+		self.assertEqual((t["source"], t["check_in"], t["check_out"]), ("check-in", "9:50 AM", "5:20 PM"))
+		self.assertEqual(t["at_work_minutes"], 450)
+		self.assertTrue(t["calls_summary"].startswith("5 calls, "), t["calls_summary"])
+		self.assertIn("in 7h 30m (calling 10:00 AM - 2:01 PM)", t["calls_summary"])
+		free = [(f["from"], f["to"]) for f in t["free"]]
+		self.assertEqual(free, [("10:05 AM", "2:00 PM"), ("2:04 PM", "5:20 PM")])
+
 	def test_daily_report(self):
 		now = timeutil.now_system()
 		day = now.date()

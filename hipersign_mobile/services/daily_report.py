@@ -196,6 +196,38 @@ def _hhmm(m: int) -> str:
 	return _fmt_time(dt.datetime.combine(dt.date.today(), dt.time(min(m, 1439) // 60, min(m, 1439) % 60)))
 
 
+def _dur(m: int) -> str:
+	h, mm = divmod(int(m), 60)
+	return f"{h}h {mm}m" if h and mm else (f"{h}h" if h else f"{mm}m")
+
+
+def attendance(user: str, day: dt.date, start, end, tz) -> dict:
+	"""First check-in and last check-out of the day (minutes from local midnight), from
+	Employee Checkin. Punches without IN/OUT: first = in, last = out (if there are two or more)."""
+	out = {"in": None, "out": None}
+	if not frappe.db.table_exists("Employee Checkin") or not frappe.db.table_exists("Employee"):
+		return out
+	emp = frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name")
+	if not emp:
+		return out
+	logs = frappe.db.sql(
+		"select time, log_type from `tabEmployee Checkin` where employee=%s and time>=%s and time<%s order by time asc",
+		(emp, start, end),
+		as_dict=True,
+	)
+	if not logs:
+		return out
+	ins = [l for l in logs if l.log_type == "IN"] or ([logs[0]] if not any(l.log_type == "OUT" for l in logs) else [])
+	outs = [l for l in logs if l.log_type == "OUT"] or ([logs[-1]] if len(logs) > 1 and not any(l.log_type for l in logs) else [])
+	if ins:
+		out["in"] = _mins(_local(ins[0].time, tz))
+	if outs:
+		last = _local(outs[-1].time, tz)
+		if last.date() == day:
+			out["out"] = _mins(last)
+	return out
+
+
 def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: list) -> dict:
 	"""Work hours of the day with what filled them (meetings, follow-ups, trainings, calls) and
 	the free gaps in between. Minutes are from local midnight."""
@@ -207,6 +239,19 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 	gap = cint(t.idle_minutes) if t and t.get("idle_minutes") else 0
 	gap = gap if gap > 0 else 20  # shorter gaps are not counted as free time
 	w0, w1 = ws.hour * 60 + ws.minute, we.hour * 60 + we.minute
+	now_local = dt.datetime.now(tz).replace(tzinfo=None)
+
+	# The real working time when the person checked in / out (Employee Checkin); else work hours.
+	att = attendance(user, day, start, end, tz)
+	source = "work hours"
+	if att["in"] is not None:
+		source = "check-in"
+		w0 = att["in"]
+		if att["out"] is not None and att["out"] > w0:
+			w1 = att["out"]
+		elif day == now_local.date():
+			w1 = max(w0, _mins(now_local))  # still at work
+		# a past day with only a check-in keeps the usual end time
 
 	blocks = []
 	for r in tasks:
@@ -249,7 +294,6 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 
 	lo = min([w0] + [f for f, _ in merged])
 	hi = max([w1] + [to for _, to in merged])
-	now_local = dt.datetime.now(tz).replace(tzinfo=None)
 	until = hi if day < now_local.date() else (min(hi, max(lo, _mins(now_local))) if day == now_local.date() else lo)
 
 	# Free = gaps inside work hours (and only up to now, for today).
@@ -272,7 +316,20 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 			w = _local(when, tz) if when else None
 			if w and w.date() == day:
 				marks.append({"at_min": _mins(w), "at": _fmt_time(w), "label": f"{i['kind']}: {i['title']} done"})
+	connected = sum(1 for c in calls if c["connected"])
+	at_work = max(0, min(w1, until) - w0) if until > w0 else 0
+	summary = None
+	if calls:
+		summary = f"{len(calls)} call{'s' if len(calls) != 1 else ''}, {connected} connected in {_dur(at_work)}"
+		if calls[0]["at_min"] != calls[-1]["at_min"]:
+			summary += f" (calling {calls[0]['at']} - {calls[-1]['at']})"
 	return {
+		"source": source,
+		"check_in": _hhmm(att["in"]) if att["in"] is not None else None,
+		"check_out": _hhmm(att["out"]) if att["out"] is not None else None,
+		"at_work_minutes": at_work,
+		"calls_summary": summary,
+		"calls_connected": connected,
 		"start_min": lo, "end_min": hi, "work_start_min": w0, "work_end_min": w1,
 		"start": _hhmm(lo), "end": _hhmm(hi), "until_min": until,
 		"blocks": blocks, "calls": calls, "marks": marks, "free": free,
