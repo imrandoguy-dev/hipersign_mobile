@@ -219,7 +219,18 @@ def _detail(doctype, name, customer_id):
 	rows = frappe.get_all(
 		"CRM Task", filters=filters, fields=svc.task_fields(), order_by="due_date desc", limit=30
 	)
-	activities = [svc.serialize(r, today_start, with_party=False) for r in rows]
+	# A meeting with several people has a copy each: show it once (your own copy if you're in it).
+	rows.sort(key=lambda r: r.get("assigned_to") != me)
+	seen, kept = set(), []
+	for r in rows:
+		g = r.get("hm_meeting_group")
+		if g and g in seen:
+			continue
+		if g:
+			seen.add(g)
+		kept.append(r)
+	kept.sort(key=lambda r: r.get("due_date") or frappe.utils.get_datetime("1900-01-01"), reverse=True)
+	activities = [svc.serialize(r, today_start, with_party=False) for r in kept]
 	upcoming = sorted(
 		(a for a in activities if a["status"] in ("Pending", "In Progress", "Rescheduled") and a["start"]),
 		key=lambda a: a["start"],

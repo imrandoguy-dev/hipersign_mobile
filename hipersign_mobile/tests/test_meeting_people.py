@@ -164,3 +164,15 @@ class TestMeetingPeople(TestCase):
 		self.assertEqual(secs.get("Customer"), [own["data"]["id"]])
 		# Someone outside the meeting can't open it directly.
 		self.assertFalse(call(attachments.list_files, make_user("trainer"), doctype="CRM Task", name=aid)["success"])
+
+	def test_customer_page_shows_a_shared_meeting_once(self):
+		from hipersign_mobile.api import customers
+
+		r = self._meeting([self.sales, self.manager])
+		a = r["data"]["activity"]
+		lead = a["reference"]["name"]
+		d = call(customers.get_detail, self.manager, doctype="CRM Lead", name=lead)
+		self.assertTrue(d["success"], d)
+		ids = [x["id"] for x in d["data"]["activities"]]
+		self.assertEqual(len(ids), 1)
+		self.assertEqual(ids, [self._copies(a["id"])[self.manager].name])  # the manager's own copy
