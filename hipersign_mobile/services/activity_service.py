@@ -54,6 +54,7 @@ BASE_FIELDS = [
 	"hm_completion_notes",
 	"hm_trial_booking",
 	"hm_meeting_group",
+	"hm_contact",
 ]
 OPTIONAL_FIELDS = [
 	"custom_location",
@@ -143,6 +144,10 @@ def serialize(
 		else None,
 		"modified": timeutil.to_iso(row.get("modified")),
 	}
+	if row.get("hm_contact"):
+		from hipersign_mobile.services import contacts as hm_contacts
+
+		out["contact"] = hm_contacts.summary_of(row.get("hm_contact"))
 	if row.get("hm_meeting_group"):
 		out["meeting_group"] = row.get("hm_meeting_group")
 		out["people"] = group_people(row.get("hm_meeting_group"))
@@ -331,6 +336,8 @@ def create_activity(user: str, payload: dict) -> tuple[frappe.model.document.Doc
 	)
 	if payload.get("location") and frappe.get_meta("CRM Task").has_field("custom_location"):
 		task.custom_location = payload["location"]
+	if payload.get("contact"):
+		task.hm_contact = check_contact(payload.get("reference_doctype"), payload.get("reference_name"), payload["contact"])
 	if payload.get("reminder_offsets") is not None and frappe.get_meta("CRM Task").has_field(
 		"hm_reminder_offsets"
 	):
@@ -351,6 +358,18 @@ def create_activity(user: str, payload: dict) -> tuple[frappe.model.document.Doc
 # Each person gets their own copy (so it is on their calendar with their own reminders);
 # the copies share hm_meeting_group, and edits / reschedules / cancel are applied to all.
 
+def check_contact(doctype, name, contact):
+	"""The contact person must be one of this customer's."""
+	from hipersign_mobile.services import contacts as hm_contacts
+
+	if not frappe.get_meta("CRM Task").has_field("hm_contact"):
+		return None
+	contact = str(contact).strip()
+	if not doctype or not name or contact not in hm_contacts.contact_ids(doctype, name):
+		raise frappe.ValidationError("Choose a contact person of this customer.")
+	return contact
+
+
 SHARED_FIELDS = (
 	"title",
 	"hm_activity_type",
@@ -363,6 +382,7 @@ SHARED_FIELDS = (
 	"due_date",
 	"start_date",
 	"hm_end_datetime",
+	"hm_contact",
 )
 
 
@@ -590,6 +610,9 @@ def update_details(user: str, task_id, values: dict):
 		put("hm_reminder_offsets", offsets_text(parse_offsets(values.get("reminder_offsets"))))
 	if "location" in values and frappe.get_meta("CRM Task").has_field("custom_location"):
 		put("custom_location", (values.get("location") or "").strip()[:140] or None)
+	if "contact" in values and task.meta.has_field("hm_contact"):
+		ref = (values.get("reference_doctype"), values.get("reference_name")) if values.get("reference_name") else (task.reference_doctype, task.reference_docname)
+		put("hm_contact", check_contact(ref[0], ref[1], values.get("contact")) if values.get("contact") else None)
 	if values.get("reference_doctype") and values.get("reference_name"):
 		ref_dt, ref_name = values["reference_doctype"], values["reference_name"]
 		if (ref_dt, ref_name) != (task.reference_doctype, task.reference_docname):

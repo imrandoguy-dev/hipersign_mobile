@@ -290,6 +290,29 @@ def complete(user: str, booking_id: str, notes: str | None = None):
 	return booking, True
 
 
+def add_note(user: str, booking_id: str, text: str):
+	"""A note on the trial (kept on the booking, newest last) - also saved on the customer's notes
+	so it shows when the customer is opened."""
+	booking = _get_booking_for(user, booking_id, for_update=True)
+	stamp = frappe.utils.format_datetime(timeutil.now_system(), "d MMM, h:mm a")
+	line = f"{stamp} · {frappe.utils.get_fullname(user)}: {text}"
+	booking.notes = f"{booking.notes}\n{line}" if (booking.notes or "").strip() else line
+	booking.flags.hm_service = True
+	booking.save(ignore_permissions=True)
+	doctype, name = ("Customer", booking.customer) if booking.customer else ("CRM Lead", booking.lead)
+	if name:
+		from hipersign_mobile.api.notes import text_to_html
+
+		frappe.get_doc({
+			"doctype": "FCRM Note",
+			"title": f"Trial note - {frappe.utils.format_date(booking.start_datetime, 'd MMM')}"[:140],
+			"content": text_to_html(text),
+			"reference_doctype": doctype,
+			"reference_docname": name,
+		}).insert(ignore_permissions=True)
+	return booking
+
+
 def available_slots(
 	start, end, trainer: str | None = None, booking_type: str | None = None, limit: int = 200
 ):

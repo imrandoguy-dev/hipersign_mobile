@@ -523,3 +523,39 @@ def update_party(doctype: str | None = None, name: str | None = None, values=Non
 	data = _detail(doctype, name, None)
 	data["changed"] = changed
 	return data
+
+
+@mobile_api(methods=("GET",))
+def contacts(doctype: str | None = None, name: str | None = None):
+	"""The people (and numbers) of this customer / lead / deal."""
+	from hipersign_mobile.services import contacts as hm_contacts
+
+	me = frappe.session.user
+	perms.require("customers", me)
+	doctype = choice(doctype, perms.PARTY_DOCTYPES, "doctype")
+	perms.require_party(doctype, name, me)
+	return {"items": hm_contacts.party_contacts(doctype, name)}
+
+
+@mobile_api(methods=("POST",))
+def add_contact(
+	doctype: str | None = None,
+	name: str | None = None,
+	full_name: str | None = None,
+	phone: str | None = None,
+	designation: str | None = None,
+	email: str | None = None,
+):
+	"""Another person (and number) at this company."""
+	from hipersign_mobile.api._common import optional_str, require_str
+	from hipersign_mobile.services import contacts as hm_contacts
+
+	me = frappe.session.user
+	perms.require("customers", me)
+	doctype = choice(doctype, perms.PARTY_DOCTYPES, "doctype")
+	perms.require_party(doctype, name, me)
+	full_name = require_str(full_name, "Name", 140)
+	phone = optional_str(phone, 40)
+	if not phone and not optional_str(email, 140):
+		raise frappe.ValidationError("Add a phone number (or an email).")
+	return hm_contacts.add_contact(doctype, name, full_name, phone, optional_str(designation, 140), optional_str(email, 140))

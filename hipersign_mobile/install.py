@@ -102,6 +102,14 @@ CRM_TASK_FIELDS = {
 			"insert_after": "hm_trial_booking",
 		},
 		{
+			"fieldname": "hm_contact",
+			"fieldtype": "Link",
+			"label": "Contact Person",
+			"options": "Contact",
+			"description": "Which person of the customer this is with (set from Hipersign).",
+			"insert_after": "hm_meeting_link",
+		},
+		{
 			"fieldname": "hm_meeting_group",
 			"fieldtype": "Data",
 			"label": "Meeting Group",

@@ -145,7 +145,11 @@ def _lead(name, cc, full):
 		return None
 	display = lead.lead_name or " ".join(p for p in (lead.first_name, lead.last_name) if p) or lead.name
 	phones = _dedupe_phones(
-		[contact_payload(lead.mobile_no, cc, "Mobile"), contact_payload(lead.phone, cc, "Phone")]
+		[
+			contact_payload(lead.mobile_no, cc, "Mobile"),
+			contact_payload(lead.phone, cc, "Phone"),
+			*_contact_phones(_linked_contacts("CRM Lead", name), cc),  # other people at the company
+		]
 	)
 	out = {
 		"kind": "Lead",
@@ -191,7 +195,7 @@ def _deal(name, cc, full):
 	if not d:
 		return None
 	person = d.lead_name or " ".join(p for p in (d.first_name, d.last_name) if p)
-	contacts = [d.contact] if d.contact else []
+	contacts = ([d.contact] if d.contact else []) + [c for c in _linked_contacts("CRM Deal", name) if c != d.contact]
 	phones = _dedupe_phones(
 		[
 			contact_payload(d.mobile_no, cc, "Mobile"),

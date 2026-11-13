@@ -262,6 +262,15 @@ def cancel_booking(booking_id: str, reason: str | None = None):
 
 
 @mobile_api(methods=("POST",))
+def add_note(booking_id: str, text: str | None = None):
+	from hipersign_mobile.api._common import require_str
+
+	limit_per_user("trial_note", 30, 60)
+	booking = svc.add_note(frappe.session.user, booking_id, require_str(text, "Note", 4000))
+	return {"booking": svc.serialize(booking)}
+
+
+@mobile_api(methods=("POST",))
 def complete_booking(booking_id: str, completion_notes: str | None = None):
 	booking, changed = svc.complete(frappe.session.user, booking_id, optional_str(completion_notes, 2000))
 	return {"changed": changed, "booking": svc.serialize(booking)}
