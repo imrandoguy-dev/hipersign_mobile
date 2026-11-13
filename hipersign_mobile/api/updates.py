@@ -34,8 +34,9 @@ def _conf():
 	if settings.get("enable_app_updates"):
 		token = settings.get_password("github_token", raise_exception=False)
 	token = token or frappe.conf.get("hipersign_mobile_github_token")
-	if not token:
+	if not token and not settings.get("enable_app_updates"):
 		raise UpdateConfigError("In-app updates are not enabled on this server.")
+	# No token is fine while the app repo is public.
 	repo = (
 		settings.get("release_repo")
 		or frappe.conf.get("hipersign_mobile_release_repo")
@@ -46,7 +47,24 @@ def _conf():
 
 
 def _headers(token, accept="application/vnd.github+json"):
-	return {"Authorization": f"Bearer {token}", "Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
+	h = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
+	if token:
+		h["Authorization"] = f"Bearer {token}"
+	return h
+
+
+def _get(url: str, token, accept="application/vnd.github+json", **kw):
+	"""GET from GitHub; if the saved token is expired / revoked (401), try again without it -
+	that still works while the repo is public."""
+	r = requests.get(url, headers=_headers(token, accept), timeout=15, **kw)
+	if r.status_code == 401 and token:
+		frappe.log_error(
+			title="Hipersign: GitHub token rejected",
+			message="The GitHub token in Hipersign Mobile Settings > App Updates was rejected (expired or revoked). "
+			"Updates still work while the repo is public; paste a new token to be safe.",
+		)
+		r = requests.get(url, headers=_headers(None, accept), timeout=15, **kw)
+	return r
 
 
 def _latest_release(force: bool = False) -> dict:
@@ -56,15 +74,16 @@ def _latest_release(force: bool = False) -> dict:
 		if cached:
 			return cached
 	token, repo, tag = _conf()
-	r = requests.get(f"{GITHUB_API}/repos/{repo}/releases/tags/{tag}", headers=_headers(token), timeout=15)
+	r = _get(f"{GITHUB_API}/repos/{repo}/releases/tags/{tag}", token)
 	if r.status_code != 200:
-		raise UpdateConfigError(f"Could not read the release from GitHub (HTTP {r.status_code}).")
+		hint = " The GitHub token in Hipersign Mobile Settings > App Updates has expired - paste a new one." if r.status_code in (401, 404) and token else ""
+		raise UpdateConfigError(f"Could not read the release from GitHub (HTTP {r.status_code}).{hint}")
 	release = r.json()
 	assets = {a["name"]: a for a in release.get("assets", [])}
 	apk, meta = assets.get("Hipersign.apk"), assets.get("version.json")
 	if not apk or not meta:
 		raise UpdateConfigError("The latest release has no Hipersign.apk / version.json.")
-	m = requests.get(meta["url"], headers=_headers(token, "application/octet-stream"), timeout=15)
+	m = _get(meta["url"], token, "application/octet-stream")
 	if m.status_code != 200:
 		raise UpdateConfigError("Could not read version.json from the release.")
 	info = m.json()
@@ -111,12 +130,7 @@ def get_download_url():
 	try:
 		token, _repo, _tag = _conf()
 		latest = _latest_release()
-		r = requests.get(
-			latest["apk_asset_url"],
-			headers=_headers(token, "application/octet-stream"),
-			allow_redirects=False,
-			timeout=15,
-		)
+		r = _get(latest["apk_asset_url"], token, "application/octet-stream", allow_redirects=False)
 	except UpdateConfigError as exc:
 		raise frappe.ValidationError(str(exc))
 	except requests.RequestException:

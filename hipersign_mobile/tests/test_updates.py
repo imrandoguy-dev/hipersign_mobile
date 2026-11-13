@@ -85,6 +85,20 @@ class TestUpdates(TestCase):
 			s.enable_app_updates = 0
 			s.save()
 
+	def test_expired_token_falls_back_to_public_repo(self):
+		frappe.conf["hipersign_mobile_github_token"] = "expired"
+
+		def picky_get(url, headers=None, timeout=None, allow_redirects=True):
+			if "Authorization" in (headers or {}):
+				return _resp(status=401)  # GitHub rejects the old token even on a public repo
+			return fake_get(url, headers, timeout, allow_redirects)
+
+		with patch.object(updates.requests, "get", side_effect=picky_get):
+			r = call(updates.check, self.user, version_code=120, platform="Android")
+			self.assertTrue(r["data"]["available"], r)
+			d = call(updates.get_download_url, self.user)
+			self.assertEqual(d["data"]["url"], "https://objects.githubusercontent.com/signed-apk")
+
 	def test_ios_never_offers_apk(self):
 		frappe.conf["hipersign_mobile_github_token"] = "x"
 		r = call(updates.check, self.user, version_code=1, platform="iOS")
