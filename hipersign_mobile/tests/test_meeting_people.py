@@ -175,4 +175,4 @@ class TestMeetingPeople(TestCase):
 		self.assertTrue(d["success"], d)
 		ids = [x["id"] for x in d["data"]["activities"]]
 		self.assertEqual(len(ids), 1)
-		self.assertEqual(ids, [self._copies(a["id"])[self.manager].name])  # the manager's own copy
+		self.assertEqual(ids, [str(self._copies(a["id"])[self.manager].name)])  # the manager's own copy

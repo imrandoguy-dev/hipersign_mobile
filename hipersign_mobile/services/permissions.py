@@ -30,13 +30,14 @@ SALES_CAPS = {
 	"call_recordings",
 	"quotations",
 	"invoices",
+	"prospects",  # the "New numbers" call list
 }
 MANAGER_CAPS = SALES_CAPS | {"team_view", "assign_others", "manage_trainer_slots", "development", "assign_development"}
 TRAINER_CAPS = {"manage_trainer_slots", "calendar"}  # trainings she gives are on her calendar
 DEVELOPER_CAPS = {"development"}
 # Everyone who signs in: their own tasks, today's report, app suggestions, raising a concern.
 EVERYONE_CAPS = {"tasks", "daily_report", "feedback", "concerns", "calendar"}  # calendar: their tasks by deadline
-MANAGER_CAPS = MANAGER_CAPS | {"assign_tasks", "concerns_hr", "call_targets"}
+MANAGER_CAPS = MANAGER_CAPS | {"assign_tasks", "concerns_hr", "call_targets", "prospect_search"}
 HR_CAPS = {"assign_tasks", "concerns_hr", "team_reports"}
 CEO_CAPS = MANAGER_CAPS | {"concerns_ceo"}
 

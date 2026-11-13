@@ -110,7 +110,10 @@ def sync(calls: str | list | None = None):
 			found = _party_for_phone(phone)
 			party_doctype, party = found if found else (None, None)
 		via_app = bool(c.get("via_app"))
-		if not party and not via_app:
+		from hipersign_mobile.services import prospects as hm_prospects
+
+		new_number = not party and frappe.db.exists(hm_prospects.DOCTYPE, {"phone": phone})
+		if not party and not via_app and not new_number:
 			skipped += 1  # not a work call: personal numbers are never stored
 			continue
 		direction = DIRECTIONS.get(str(c.get("direction") or "").lower(), "Outgoing")
@@ -139,6 +142,16 @@ def sync(calls: str | list | None = None):
 				"sync_key": sync_key,
 			}
 		).insert(ignore_permissions=True)
+		if new_number or frappe.db.exists(hm_prospects.DOCTYPE, {"phone": phone, "status": ["in", list(hm_prospects.OPEN)]}):
+			try:
+				became = hm_prospects.after_call(phone, me, connected, duration, when)
+			except Exception:
+				became = None
+				frappe.log_error(title="Hipersign: new number after call")
+			if became:
+				s = party_summary(*became)
+				log.db_set({"party_doctype": became[0], "party": became[1], "party_name": (s or {}).get("name")}, update_modified=False)
+				party_doctype, party = became
 		if connected:
 			_promote_later_calls(phone, party_doctype, party, when)
 		try:

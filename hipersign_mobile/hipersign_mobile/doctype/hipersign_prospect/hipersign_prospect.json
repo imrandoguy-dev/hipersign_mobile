@@ -1,0 +1,219 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "PRS-.#####",
+ "creation": "2026-11-13 20:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "business_name",
+  "phone",
+  "status",
+  "assigned_to",
+  "column_break_1",
+  "search_text",
+  "place",
+  "batch",
+  "found_by",
+  "details_section",
+  "address",
+  "maps_url",
+  "place_id",
+  "calls_section",
+  "attempts",
+  "last_called",
+  "last_duration",
+  "column_break_2",
+  "crm_lead",
+  "converted_on",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "business_name",
+   "fieldtype": "Data",
+   "label": "Business",
+   "in_list_view": 1,
+   "reqd": 1,
+   "length": 200
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Phone",
+   "in_list_view": 1,
+   "search_index": 1,
+   "options": "Phone"
+  },
+  {
+   "default": "New",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "options": "New\nNot Connected\nConverted\nNot Interested",
+   "search_index": 1
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "label": "Assigned To",
+   "options": "User",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "search_text",
+   "fieldtype": "Data",
+   "label": "Searched For",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "place",
+   "fieldtype": "Data",
+   "label": "Place",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Data",
+   "label": "Batch",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "found_by",
+   "fieldtype": "Link",
+   "label": "Found By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Business"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Small Text",
+   "label": "Address"
+  },
+  {
+   "fieldname": "maps_url",
+   "fieldtype": "Data",
+   "label": "Google Maps Link",
+   "options": "URL"
+  },
+  {
+   "fieldname": "place_id",
+   "fieldtype": "Data",
+   "label": "Google Place ID",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "calls_section",
+   "fieldtype": "Section Break",
+   "label": "Calls"
+  },
+  {
+   "default": "0",
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Call Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_called",
+   "fieldtype": "Datetime",
+   "label": "Last Called",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "last_duration",
+   "fieldtype": "Int",
+   "label": "Last Call (seconds)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "crm_lead",
+   "fieldtype": "Link",
+   "label": "CRM Lead",
+   "options": "CRM Lead",
+   "read_only": 1
+  },
+  {
+   "fieldname": "converted_on",
+   "fieldtype": "Datetime",
+   "label": "Converted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-13 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hipersign Mobile",
+ "name": "Hipersign Prospect",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign Manager",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hipersign CEO",
+   "share": 0,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "business_name",
+ "track_changes": 1
+}

@@ -87,6 +87,7 @@ SECTIONS = [
 		[
 			("App Settings", "Hipersign Mobile Settings", "DocType", "settings"),
 			("Call Targets", "Call Target", "DocType", "target"),
+			("New Numbers", "Hipersign Prospect", "DocType", "phone"),
 			("Phones", "Mobile Device", "DocType", "smartphone"),
 			("Notifications", "Mobile Notification", "DocType", "bell"),
 			("Notification Preferences", "Mobile User Preference", "DocType", "bell-ring"),

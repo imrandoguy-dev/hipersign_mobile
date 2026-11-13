@@ -15,6 +15,10 @@ from hipersign_mobile.tests.utils import call, ensure_company, ensure_item, make
 
 def ensure_cash(company: str) -> str:
 	frappe.set_user("Administrator")
+	# A site that never ran the setup wizard has no Party Types.
+	for pt, acc in (("Customer", "Receivable"), ("Supplier", "Payable")):
+		if not frappe.db.exists("Party Type", pt):
+			frappe.get_doc({"doctype": "Party Type", "party_type": pt, "account_type": acc}).insert(ignore_permissions=True)
 	if not frappe.db.exists("Mode of Payment", "Cash"):
 		frappe.get_doc({"doctype": "Mode of Payment", "mode_of_payment": "Cash", "type": "Cash", "enabled": 1}).insert(ignore_permissions=True)
 	mop = frappe.get_doc("Mode of Payment", "Cash")

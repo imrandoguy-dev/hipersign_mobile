@@ -35,6 +35,8 @@ def _resp(status=200, data=None):
 
 
 def _set(**values):
+	if values.get("google_lead_source") and not frappe.db.exists("CRM Lead Source", values["google_lead_source"]):
+		frappe.get_doc({"doctype": "CRM Lead Source", "source_name": values["google_lead_source"]}).insert(ignore_permissions=True)
 	s = frappe.get_single("Hipersign Mobile Settings")
 	s.update(values)
 	s.save(ignore_permissions=True)
