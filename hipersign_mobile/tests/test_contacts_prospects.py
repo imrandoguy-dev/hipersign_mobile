@@ -155,3 +155,29 @@ class TestContactsAndProspects(TestCase):
 		self.assertEqual(call(prospects.get_list, self.caller)["data"]["counts"]["to_call"], 0)
 		# Someone else's number can't be touched.
 		self.assertFalse(call(prospects.convert, self.sales2, prospect_id=todo["No Thanks"]["id"])["success"])
+
+	# ------------------------------------------------------------ lead -> deal
+
+	def test_convert_lead_to_deal(self):
+		lead = make_lead(f"HM Convert {_n()}", f"+91 97472 {_n()}", owner=self.sales)
+		start = future(2, 15)
+		a = call(activities.create_activity, self.sales, title="Demo", activity_type="Follow-up",
+				 reference_doctype="CRM Lead", reference_name=lead, start=start.isoformat(),
+				 end=(start + dt.timedelta(minutes=15)).isoformat(), idempotency_key=f"c{_n()}{_n()}")
+		self.assertTrue(a["success"], a)
+		r = call(customers.convert_to_deal, self.sales, name=lead)
+		self.assertTrue(r["success"], r)
+		deal = r["data"]["deal"]
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal, "lead"), lead)
+		self.assertTrue(frappe.db.get_value("CRM Lead", lead, "converted"))
+		self.assertEqual(r["data"]["party"]["doctype"], "CRM Deal")
+		# The follow-up is on the deal now, and shows on its page.
+		task = a["data"]["activity"]["id"]
+		self.assertEqual(frappe.db.get_value("CRM Task", task, ["reference_doctype", "reference_docname"]), ("CRM Deal", deal))
+		d = call(customers.get_detail, self.sales, doctype="CRM Deal", name=deal)
+		self.assertTrue(d["success"], d)
+		self.assertIn(str(task), [str(x["id"]) for x in d["data"]["activities"]])
+		# Converting again gives the same deal; someone without access can't convert.
+		self.assertEqual(call(customers.convert_to_deal, self.sales, name=lead)["data"]["deal"], deal)
+		other = make_lead(f"HM Convert2 {_n()}", f"+91 97473 {_n()}", owner=self.sales)
+		self.assertFalse(call(customers.convert_to_deal, self.trainer, name=other)["success"])

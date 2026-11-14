@@ -559,3 +559,33 @@ def add_contact(
 	if not phone and not optional_str(email, 140):
 		raise frappe.ValidationError("Add a phone number (or an email).")
 	return hm_contacts.add_contact(doctype, name, full_name, phone, optional_str(designation, 140), optional_str(email, 140))
+
+
+@mobile_api(methods=("POST",))
+def convert_to_deal(name: str | None = None):
+	"""Lead -> Deal (Frappe CRM's own conversion: contact, organization, deal). The lead's
+	follow-ups and meetings move to the deal so its page shows the whole history. Converting
+	again just returns the deal."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	name = require_str(name, "Lead", 140)
+	perms.require_party("CRM Lead", name, me)
+	deal = frappe.db.get_value("CRM Deal", {"lead": name}, "name")
+	if not deal:
+		from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal as crm_convert
+
+		from hipersign_mobile.api.quotations import _as_admin
+
+		lead = frappe.get_doc("CRM Lead", name)
+		lead.flags.ignore_permissions = True
+		with _as_admin():  # contact / organization / deal are made for the sales person
+			deal = crm_convert(lead=name, doc=lead)
+		if not frappe.db.get_value("CRM Deal", deal, "deal_owner"):
+			frappe.db.set_value("CRM Deal", deal, "deal_owner", lead.lead_owner or me, update_modified=False)
+		frappe.db.sql(
+			"""update `tabCRM Task` set reference_doctype='CRM Deal', reference_docname=%s
+			where reference_doctype='CRM Lead' and reference_docname=%s""",
+			(deal, name),
+		)
+		frappe.get_doc("CRM Deal", deal).add_comment("Info", f"Converted from lead {name} in Hipersign by {frappe.utils.get_fullname(me)}")
+	return {"deal": deal, "party": party_summary("CRM Deal", deal)}
