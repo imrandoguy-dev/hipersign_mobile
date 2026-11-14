@@ -672,3 +672,53 @@ def create_party(
 		return {"party": party_summary("CRM Lead", lead.name), "created": True}
 	deal = _convert(lead.name, me)  # a deal is made the CRM way: lead -> deal
 	return {"party": party_summary("CRM Deal", deal), "created": True}
+
+
+def _split_address(address: str | None) -> dict:
+	"""'Shop 4, MG Road, Kochi, Kerala 682016, India' -> line 1, city, state, PIN."""
+	import re
+
+	parts = [p.strip() for p in (address or "").split(",") if p.strip()]
+	if parts and parts[-1].lower() in ("india", "united arab emirates", "uae"):
+		parts = parts[:-1]
+	out = {"address_line1": None, "city": None, "state": None, "pincode": None}
+	if parts:
+		m = re.match(r"^(.*?)\s*(\d{5,6})$", parts[-1])
+		if m:
+			out["state"], out["pincode"] = (m.group(1) or None), m.group(2)
+			parts = parts[:-1]
+	if len(parts) >= 2:
+		out["city"] = parts[-1]
+		parts = parts[:-1]
+	out["address_line1"] = ", ".join(parts) or None
+	return out
+
+
+@mobile_api(methods=("POST",))
+def google_link(url: str | None = None):
+	"""A Google Business / Maps link -> the business's name, phone, address and website, to
+	fill a lead / deal / customer while editing it."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	limit_per_user("google_link", 30, 60)
+	url = require_str(url, "Link", 2000)
+	if not google_places.enabled():
+		raise frappe.ValidationError("Google lookup is switched off in Hipersign Mobile Settings.")
+	query = google_places.query_from_shared(url)
+	if not query:
+		raise frappe.ValidationError("Could not read a business from this link.")
+	try:
+		place = google_places.place_with_phone(query)
+	except google_places.GoogleLookupError as e:
+		raise frappe.ValidationError(str(e))
+	if not place:
+		raise frappe.ValidationError("Google did not find this business.")
+	cc = hm_settings.get().default_country_code
+	return {
+		"name": place.get("name"),
+		"phone": normalize_phone(place.get("phone"), cc) if place.get("phone") else None,
+		"address": place.get("address"),
+		"address_parts": _split_address(place.get("address")),
+		"maps_url": place.get("maps_url") or url,
+		"place_id": place.get("place_id"),
+	}

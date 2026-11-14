@@ -163,6 +163,9 @@ def form(doctype: str, name: str) -> list[dict]:
 	meta = frappe.get_meta(doctype)
 	has = meta.has_field
 	out: list[dict] = []
+	if has("hm_google_maps_url"):
+		# Paste a Google Business / Maps link: the app fills name, phone, address from it.
+		out.append(_field("hm_google_maps_url", "Google Business link", "google_link", doc.get("hm_google_maps_url")))
 	if doctype == "CRM Lead":
 		out += [
 			_field("first_name", "First name / Business", value=doc.first_name, required=True),
@@ -377,6 +380,10 @@ def _clean(field: dict, value):
 		if text and text not in (field.get("options") or []):
 			raise frappe.ValidationError(f"{field['label']}: choose one of the listed values.")
 		return text or None
+	if t == "google_link":
+		if text and not text.lower().startswith(("http://", "https://")):
+			raise frappe.ValidationError("Paste the full Google link (starting with https://).")
+		return text[:500] or None
 	if t == "phone":
 		if not text:
 			return None

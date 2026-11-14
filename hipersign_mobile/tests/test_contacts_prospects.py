@@ -215,3 +215,33 @@ class TestContactsAndProspects(TestCase):
 		self.assertEqual([p["name"] for p in people], ["Anil"])
 
 		self.assertFalse(call(customers.create_party, self.sales, kind="lead")["success"])  # no name
+
+	# ------------------------------------------------------------ Google Business link while editing
+
+	def test_google_business_link_fills_and_saves(self):
+		from hipersign_mobile.services import google_places
+
+		self.assertEqual(
+			customers._split_address("Shop 4, MG Road, Kochi, Kerala 682016, India"),
+			{"address_line1": "Shop 4, MG Road", "city": "Kochi", "state": "Kerala", "pincode": "682016"},
+		)
+		place = {"name": "Sunrise Solar", "phone": "+91 484 123 4567", "address": "12 Beach Rd, Kochi, Kerala 682001, India",
+				 "maps_url": "https://maps.google.com/?cid=42", "place_id": "gp-42"}
+		with patch.object(google_places, "enabled", return_value=True), \
+			patch.object(google_places, "query_from_shared", return_value="Sunrise Solar Kochi"), \
+			patch.object(google_places, "place_with_phone", return_value=place):
+			r = call(customers.google_link, self.sales, url="https://maps.app.goo.gl/abc")
+		self.assertTrue(r["success"], r)
+		self.assertEqual(r["data"]["phone"], "+914841234567")
+		self.assertEqual(r["data"]["address_parts"]["city"], "Kochi")
+
+		cust = make_customer(f"HM Link Cust {_n()}", f"+91 97477 {_n()}")
+		form = call(customers.edit_form, self.manager, doctype="Customer", name=cust)["data"]
+		keys = [f["key"] for f in (form["fields"] if isinstance(form, dict) else form)]
+		self.assertEqual(keys[0], "hm_google_maps_url")
+		u = call(customers.update_party, self.manager, doctype="Customer", name=cust,
+				 values=json.dumps({"hm_google_maps_url": "https://maps.google.com/?cid=42"}))
+		self.assertTrue(u["success"], u)
+		self.assertEqual(frappe.db.get_value("Customer", cust, "hm_google_maps_url"), "https://maps.google.com/?cid=42")
+		bad = call(customers.update_party, self.manager, doctype="Customer", name=cust, values=json.dumps({"hm_google_maps_url": "not a link"}))
+		self.assertFalse(bad["success"])

@@ -206,6 +206,7 @@ def setup():
 	add_whatsapp_template_field()
 	add_quotation_lead_field()
 	add_customer_lead_field()
+	add_customer_google_fields()
 	default_quotation_company()
 	add_shift_break_fields()
 	backfill_trial_periods()
@@ -360,6 +361,34 @@ def add_quotation_lead_field():
 					"search_index": 1,
 					"description": "Made by Hipersign for a quotation to this CRM lead.",
 				}
+			]
+		},
+		update=True,
+	)
+
+
+def add_customer_google_fields():
+	"""The Google Business (Maps) link of a customer, like leads and deals have."""
+	if not frappe.db.exists("DocType", "Customer"):
+		return
+	create_custom_fields(
+		{
+			"Customer": [
+				{
+					"fieldname": "hm_google_maps_url",
+					"fieldtype": "Data",
+					"options": "URL",
+					"label": "Google Maps Link",
+					"insert_after": "customer_name",
+				},
+				{
+					"fieldname": "hm_google_place_id",
+					"fieldtype": "Data",
+					"label": "Google Place ID",
+					"insert_after": "hm_google_maps_url",
+					"read_only": 1,
+					"no_copy": 1,
+				},
 			]
 		},
 		update=True,
