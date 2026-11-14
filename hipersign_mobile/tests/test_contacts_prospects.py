@@ -181,3 +181,37 @@ class TestContactsAndProspects(TestCase):
 		self.assertEqual(call(customers.convert_to_deal, self.sales, name=lead)["data"]["deal"], deal)
 		other = make_lead(f"HM Convert2 {_n()}", f"+91 97473 {_n()}", owner=self.sales)
 		self.assertFalse(call(customers.convert_to_deal, self.trainer, name=other)["success"])
+
+	# ------------------------------------------------------------ + button: new lead / deal / customer
+
+	def test_create_lead_deal_customer(self):
+		r = call(customers.create_party, self.sales, kind="lead", company=f"HM Plus Co {_n()}", person="Ravi K",
+				 phone=f"+91 97474 {_n()}", email="ravi@example.com")
+		self.assertTrue(r["success"], r)
+		self.assertTrue(r["data"]["created"])
+		lead = r["data"]["party"]
+		self.assertEqual(lead["doctype"], "CRM Lead")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead["id"], "lead_owner"), self.sales)
+		# Same number again: the existing lead comes back, nothing new.
+		again = call(customers.create_party, self.sales, kind="customer", company="Dup", phone=lead["phones"][0]["e164"])
+		self.assertFalse(again["data"]["created"])
+		self.assertEqual(again["data"]["party"]["id"], lead["id"])
+
+		d = call(customers.create_party, self.sales, kind="deal", company=f"HM Plus Deal {_n()}", person="Meera",
+				 phone=f"+91 97475 {_n()}")
+		self.assertTrue(d["success"], d)
+		self.assertEqual(d["data"]["party"]["doctype"], "CRM Deal")
+		self.assertTrue(call(customers.get_detail, self.sales, doctype="CRM Deal", name=d["data"]["party"]["id"])["success"])
+
+		c = call(customers.create_party, self.sales, kind="customer", company=f"HM Plus Cust {_n()}", person="Anil",
+				 phone=f"+91 97476 {_n()}")
+		self.assertTrue(c["success"], c)
+		cust = c["data"]["party"]
+		self.assertEqual(cust["doctype"], "Customer")
+		self.assertTrue(cust["phones"])
+		# The person who added it can open it.
+		self.assertTrue(call(customers.get_detail, self.sales, doctype="Customer", name=cust["id"])["success"])
+		people = call(customers.contacts, self.sales, doctype="Customer", name=cust["id"])["data"]["items"]
+		self.assertEqual([p["name"] for p in people], ["Anil"])
+
+		self.assertFalse(call(customers.create_party, self.sales, kind="lead")["success"])  # no name

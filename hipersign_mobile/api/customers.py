@@ -570,6 +570,11 @@ def convert_to_deal(name: str | None = None):
 	perms.require("customers", me)
 	name = require_str(name, "Lead", 140)
 	perms.require_party("CRM Lead", name, me)
+	deal = _convert(name, me)
+	return {"deal": deal, "party": party_summary("CRM Deal", deal)}
+
+
+def _convert(name: str, me: str) -> str:
 	deal = frappe.db.get_value("CRM Deal", {"lead": name}, "name")
 	if not deal:
 		from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal as crm_convert
@@ -588,4 +593,82 @@ def convert_to_deal(name: str | None = None):
 			(deal, name),
 		)
 		frappe.get_doc("CRM Deal", deal).add_comment("Info", f"Converted from lead {name} in Hipersign by {frappe.utils.get_fullname(me)}")
-	return {"deal": deal, "party": party_summary("CRM Deal", deal)}
+	return deal
+
+
+@mobile_api(methods=("POST",))
+def create_party(
+	kind: str | None = None,
+	company: str | None = None,
+	person: str | None = None,
+	phone: str | None = None,
+	email: str | None = None,
+):
+	"""New lead, deal or customer from the + button. A number already in ERP is not added
+	again: that customer / lead / deal is returned instead (created = false)."""
+	me = frappe.session.user
+	perms.require("customers", me)
+	limit_per_user("create_party", 30, 60)
+	kind = choice(kind, ("lead", "deal", "customer"), "kind")
+	company = optional_str(company, 140)
+	person = optional_str(person, 140)
+	if not company and not person:
+		raise frappe.ValidationError("Enter the company or the person's name.")
+	e164 = normalize_phone(phone, hm_settings.get().default_country_code) if phone else None
+	if phone and not e164:
+		raise frappe.ValidationError("Enter a valid phone number.")
+	email = optional_str(email, 140)
+	if email and not frappe.utils.validate_email_address(email):
+		raise frappe.ValidationError("Enter a valid email.")
+	if e164:
+		found = _party_for_phone(e164)
+		if found:
+			return {"party": _visible_summary(found, me), "created": False}
+
+	if kind == "customer":
+		if not frappe.db.exists("DocType", "Customer"):
+			raise frappe.ValidationError("Customers need ERPNext on this site.")
+		c = frappe.new_doc("Customer")
+		c.customer_name = company or person
+		c.customer_type = "Company" if company else "Individual"
+		c.customer_group = (
+			frappe.db.get_single_value("Selling Settings", "customer_group")
+			or frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+		)
+		c.territory = (
+			frappe.db.get_single_value("Selling Settings", "territory")
+			or frappe.db.get_value("Territory", {"is_group": 0}, "name")
+		)
+		if c.meta.has_field("account_manager"):
+			c.account_manager = me  # so the person who added it can open it
+		c.flags.ignore_mandatory = True
+		c.insert(ignore_permissions=True)
+		if e164 or email or person:
+			from hipersign_mobile.services import contacts as hm_contacts
+
+			added = hm_contacts.add_contact("Customer", c.name, person or c.customer_name, e164, None, email)
+			c.db_set("customer_primary_contact", added["id"], update_modified=False)
+			if e164 and c.meta.has_field("mobile_no"):
+				c.db_set("mobile_no", e164, update_modified=False)
+		frappe.local.hm_party_cache = {}
+		return {"party": party_summary("Customer", c.name), "created": True}
+
+	parts = (person or company).split(" ", 1)
+	lead = frappe.get_doc(
+		{
+			"doctype": "CRM Lead",
+			"first_name": parts[0],
+			"last_name": parts[1] if len(parts) > 1 else None,
+			"organization": company,
+			"mobile_no": e164,
+			"email": email,
+			"lead_owner": me,
+			"status": _lead_status(),
+			"source": _lead_source(False),
+		}
+	).insert(ignore_permissions=True)
+	frappe.local.hm_party_cache = {}
+	if kind == "lead":
+		return {"party": party_summary("CRM Lead", lead.name), "created": True}
+	deal = _convert(lead.name, me)  # a deal is made the CRM way: lead -> deal
+	return {"party": party_summary("CRM Deal", deal), "created": True}
