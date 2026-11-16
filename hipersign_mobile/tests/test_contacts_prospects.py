@@ -44,6 +44,9 @@ class TestContactsAndProspects(TestCase):
 		s.save(ignore_permissions=True)
 		frappe.db.commit()
 
+	def setUp(self):
+		frappe.cache.delete_keys("hipersign_mobile:rl:")  # many calls in one run: no rate limit
+
 	def tearDown(self):
 		frappe.set_user("Administrator")
 		frappe.db.rollback()
