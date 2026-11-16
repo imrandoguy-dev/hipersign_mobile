@@ -25,14 +25,26 @@ doc_events = {
 	"User": {
 		"on_update": "hipersign_mobile.events.user.on_update",
 	},
+	# Earlier calls / recordings of a number are linked when a record gets that number.
 	"CRM Lead": {
 		"after_insert": [
 			"hipersign_mobile.services.whatsapp_rules.after_lead_insert",
-			"hipersign_mobile.api.recordings.link_orphans",
+			"hipersign_mobile.services.call_links.on_party_saved",
 		],
+		"on_update": "hipersign_mobile.services.call_links.on_party_saved",
 	},
-	"CRM Deal": {"after_insert": "hipersign_mobile.api.recordings.link_orphans"},
-	"Customer": {"after_insert": "hipersign_mobile.api.recordings.link_orphans"},
+	"CRM Deal": {
+		"after_insert": "hipersign_mobile.services.call_links.on_party_saved",
+		"on_update": "hipersign_mobile.services.call_links.on_party_saved",
+	},
+	"Customer": {
+		"after_insert": "hipersign_mobile.services.call_links.on_party_saved",
+		"on_update": "hipersign_mobile.services.call_links.on_party_saved",
+	},
+	"Contact": {
+		"after_insert": "hipersign_mobile.services.call_links.on_contact_saved",
+		"on_update": "hipersign_mobile.services.call_links.on_contact_saved",
+	},
 	# Chat list + notifications for WhatsApp chats in the app (only when Frappe WhatsApp is installed).
 	"WhatsApp Message": {
 		"after_insert": "hipersign_mobile.services.whatsapp_chat.on_message_insert",

@@ -125,6 +125,10 @@ def upload(
 	if party:
 		party_doctype = choice(party_doctype, perms.PARTY_DOCTYPES, "party_doctype")
 		perms.require_party(party_doctype, party, me)
+		# The phone may remember an old link: keep it only if this party has the number.
+		from hipersign_mobile.services.call_links import checked_party
+
+		party_doctype, party = checked_party(party_doctype, party, normalized)
 	else:
 		# Not linked on the phone (e.g. a number that isn't in ERPNext): find it by number,
 		# else keep it unlinked - it is linked when a lead / customer with the number appears.
@@ -270,27 +274,7 @@ def download(name: str | None = None):
 
 
 def link_orphans(doc, method=None):
-	"""doc_event (CRM Lead / CRM Deal / Customer after_insert): recordings and calls of this
-	number that were saved before it was in ERPNext now belong to it."""
-	try:
-		from hipersign_mobile.services.party import party_summary
+	"""Kept for old hooks: see services.call_links.on_party_saved."""
+	from hipersign_mobile.services.call_links import on_party_saved
 
-		summary = party_summary(doc.doctype, doc.name) or {}
-		numbers = [p["e164"] for p in summary.get("phones") or [] if p.get("e164")]
-		if not numbers:
-			return
-		for rec in frappe.get_all(
-			"Call Recording",
-			filters={"phone": ["in", numbers], "party": ["in", ["", None]]},
-			pluck="name",
-		):
-			r = frappe.get_doc("Call Recording", rec)
-			r.party_doctype, r.party = doc.doctype, doc.name
-			r.save(ignore_permissions=True)
-		frappe.db.sql(
-			"""update `tabMobile Call Log` set party_doctype = %(dt)s, party = %(name)s, party_name = %(title)s
-			where phone in %(numbers)s and ifnull(party, '') = ''""",
-			{"dt": doc.doctype, "name": doc.name, "title": summary.get("name"), "numbers": tuple(numbers)},
-		)
-	except Exception:
-		frappe.log_error(title="Hipersign: could not link earlier recordings to the new record")
+	return on_party_saved(doc, method)

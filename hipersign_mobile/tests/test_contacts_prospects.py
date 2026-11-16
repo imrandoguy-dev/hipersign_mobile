@@ -245,3 +245,47 @@ class TestContactsAndProspects(TestCase):
 		self.assertEqual(frappe.db.get_value("Customer", cust, "hm_google_maps_url"), "https://maps.google.com/?cid=42")
 		bad = call(customers.update_party, self.manager, doctype="Customer", name=cust, values=json.dumps({"hm_google_maps_url": "not a link"}))
 		self.assertFalse(bad["success"])
+
+	# ------------------------------------------------------------ calls on the right record
+
+	def _sync(self, user, number, party=None, via_app=True, minutes_ago=30):
+		when = (frappe.utils.now_datetime() - dt.timedelta(minutes=minutes_ago)).isoformat()
+		row = {"key": f"k{_n()}{_n()}", "number": number, "started_at": when, "duration": 30, "direction": "outgoing", "via_app": via_app}
+		if party:
+			row.update({"party_doctype": party[0], "party": party[1]})
+		r = call(calls.sync, user, calls=json.dumps([row]))
+		self.assertTrue(r["success"], r)
+		return frappe.db.get_value("Mobile Call Log", {"phone": psvc.normalize_phone(number)}, ["party_doctype", "party"], order_by="creation desc")
+
+	def test_phone_link_to_a_record_without_that_number_is_ignored(self):
+		wrong = make_lead(f"HM Wrong {_n()}", f"+91 97478 {_n()}", owner=self.sales)
+		teammate = f"+91 97479 {_n()}"  # not on any record
+		self.assertEqual(self._sync(self.sales, teammate, party=("CRM Lead", wrong)), (None, None))
+		right = make_lead(f"HM Right {_n()}", f"+91 97480 {_n()}", owner=self.sales)
+		num = frappe.db.get_value("CRM Lead", right, "mobile_no")
+		self.assertEqual(self._sync(self.sales, num, party=("CRM Lead", wrong)), ("CRM Lead", right))
+
+	def test_earlier_calls_link_when_number_is_added_later(self):
+		number = f"+91 97481 {_n()}"
+		self.assertEqual(self._sync(self.sales, number, minutes_ago=600), (None, None))  # unknown, called from app
+		lead = make_lead(f"HM Later {_n()}", f"+91 97482 {_n()}", owner=self.sales)
+		d = frappe.get_doc("CRM Lead", lead)
+		d.mobile_no = psvc.normalize_phone(number)
+		d.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value("Mobile Call Log", {"phone": psvc.normalize_phone(number)}, "party"), lead)
+		# Same for a number added as a contact person.
+		other = f"+91 97483 {_n()}"
+		self._sync(self.sales, other, minutes_ago=500)
+		call(customers.add_contact, self.sales, doctype="CRM Lead", name=lead, full_name="Second Person", phone=other)
+		self.assertEqual(frappe.db.get_value("Mobile Call Log", {"phone": psvc.normalize_phone(other)}, "party"), lead)
+
+	def test_repair_moves_wrongly_linked_calls(self):
+		from hipersign_mobile.services import call_links
+
+		wrong = make_lead(f"HM Rep {_n()}", f"+91 97484 {_n()}", owner=self.sales)
+		number = psvc.normalize_phone(f"+91 97485 {_n()}")
+		self._sync(self.sales, number)
+		frappe.db.set_value("Mobile Call Log", {"phone": number}, {"party_doctype": "CRM Lead", "party": wrong})
+		fixed = call_links.repair(days=5)
+		self.assertGreaterEqual(fixed["Mobile Call Log"], 1)
+		self.assertFalse(frappe.db.get_value("Mobile Call Log", {"phone": number}, "party"))

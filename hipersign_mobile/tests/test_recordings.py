@@ -101,9 +101,12 @@ class TestRecordings(TestCase):
 
 	def test_works_for_leads(self):
 		lead = make_lead("HM Rec Lead", "9061234567")
-		r = upload(self.sales1, _audio(), party_doctype="CRM Lead", party=lead)
+		r = upload(self.sales1, _audio(), party_doctype="CRM Lead", party=lead, phone="9061234567")
 		self.assertTrue(r["success"], r)
 		self.assertEqual(r["data"]["party_doctype"], "CRM Lead")
+		# The phone named the lead, but the number is the customer's: it goes to the customer.
+		r = upload(self.sales1, _audio(), party_doctype="CRM Lead", party=lead, phone="98470 12345")
+		self.assertEqual(r["data"]["party_doctype"], "Customer")
 
 	def test_rejects_bad_files(self):
 		self.assertEqual(upload(self.sales1, None)["_http_status"], 422)

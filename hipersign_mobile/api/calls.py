@@ -105,10 +105,10 @@ def sync(calls: str | list | None = None):
 		if frappe.db.exists("Mobile Call Log", {"sync_key": sync_key}):
 			skipped += 1
 			continue
-		party_doctype, party = c.get("party_doctype"), c.get("party")
-		if not (party_doctype in perms.PARTY_DOCTYPES and party and frappe.db.exists(party_doctype, party)):
-			found = _party_for_phone(phone)
-			party_doctype, party = found if found else (None, None)
+		# The phone's link is used only if that party really has this number.
+		from hipersign_mobile.services.call_links import checked_party
+
+		party_doctype, party = checked_party(c.get("party_doctype"), c.get("party"), phone)
 		via_app = bool(c.get("via_app"))
 		from hipersign_mobile.services import prospects as hm_prospects
 
