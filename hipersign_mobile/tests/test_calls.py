@@ -150,6 +150,19 @@ class TestCalls(TestCase):
 		r = call(calls.list_calls, self.caller, filter="not_reached")
 		self.assertEqual([i for i in r["data"]["items"] if i["phone"] == E164], [])
 
+	def test_new_reached_list(self):
+		self._sync(self.caller, [_call(f"{self.p}r1", 25, 40)])  # a first call that connected
+		r = call(calls.list_calls, self.caller, filter="new_reached")
+		self.assertTrue(r["success"], r)
+		rows = [i for i in r["data"]["items"] if i["phone"] == E164]
+		self.assertEqual(len(rows), 1)
+		self.assertTrue(rows[0]["connected"])
+		self.assertGreaterEqual(r["data"]["today"]["new_reached"], 1)
+		# A later call to the same number is a follow-up, not a new one.
+		self._sync(self.caller, [_call(f"{self.p}r2", 5, 30)])
+		r = call(calls.list_calls, self.caller, filter="new_reached")
+		self.assertEqual(len([i for i in r["data"]["items"] if i["phone"] == E164]), 1)
+
 	def test_call_shows_the_lead_created_later(self):
 		num = "+91 98950 5" + self.p[:4].translate(str.maketrans("abcdef", "123456"))
 		self._sync(self.caller, [_call(f"{self.p}z", 15, 30, number=num, via_app=True)])

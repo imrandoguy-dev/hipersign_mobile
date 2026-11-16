@@ -171,6 +171,7 @@ def today_summary():
 	r = frappe.db.sql(
 		"""select count(*) total, coalesce(sum(connected), 0) connected,
 		coalesce(sum(call_type = 'New'), 0) new_calls, coalesce(sum(call_type = 'Follow-up'), 0) followups,
+		coalesce(sum(call_type = 'New' and connected = 1), 0) new_reached,
 		coalesce(sum(duration_seconds), 0) talk
 		from `tabMobile Call Log` where caller = %s and direction = 'Outgoing' and call_datetime >= %s""",
 		(me, start),
@@ -204,7 +205,7 @@ def whatsapp_status(doctype: str | None = None, name: str | None = None, since: 
 
 
 KINDS = {"Customer": "Customer", "CRM Lead": "Lead", "CRM Deal": "Deal"}
-CALL_FILTERS = ("all", "new_not_reached", "not_reached", "connected", "not_connected", "incoming", "missed")
+CALL_FILTERS = ("all", "new_reached", "new_not_reached", "not_reached", "connected", "not_connected", "incoming", "missed")
 
 
 @mobile_api(methods=("GET",))
@@ -236,7 +237,10 @@ def list_calls(
 	filters = []
 	if scope == "mine":
 		filters.append(["caller", "=", me])
-	if kind == "connected":
+	if kind == "new_reached":
+		# New leads that picked up: first calls that connected.
+		filters += [["connected", "=", 1], ["call_type", "=", "New"], ["direction", "=", "Outgoing"]]
+	elif kind == "connected":
 		filters.append(["connected", "=", 1])
 	elif kind == "not_connected":
 		filters += [["connected", "=", 0], ["direction", "=", "Outgoing"]]
@@ -252,7 +256,7 @@ def list_calls(
 		if len(digits) >= 3:
 			or_filters.append(["phone", "like", f"%{digits}%"])
 
-	return _page(
+	result = _page(
 		frappe.get_all(
 			"Mobile Call Log",
 			filters=filters,
@@ -267,6 +271,7 @@ def list_calls(
 		me,
 		scope,
 	)
+	return result
 
 
 LOG_FIELDS = [
@@ -415,6 +420,7 @@ def _today(user: str | None) -> dict:
 	r = frappe.db.sql(
 		f"""select count(*) total, coalesce(sum(connected), 0) connected,
 		coalesce(sum(call_type = 'New'), 0) new_calls, coalesce(sum(call_type = 'Follow-up'), 0) followups,
+		coalesce(sum(call_type = 'New' and connected = 1), 0) new_reached,
 		coalesce(sum(duration_seconds), 0) talk
 		from `tabMobile Call Log` where direction = 'Outgoing' and call_datetime >= %(start)s {cond}""",
 		{"start": start, **args},
