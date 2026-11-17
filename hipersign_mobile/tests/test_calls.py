@@ -23,9 +23,9 @@ def _at(minutes_ago: int) -> str:
 	return (dt.datetime.now(dt.UTC) - dt.timedelta(minutes=minutes_ago)).isoformat()
 
 
-def _call(key, minutes_ago, duration, number=NUM, direction="outgoing", via_app=False):
+def _call(key, minutes_ago, duration, number=NUM, direction="outgoing", via_app=False, work_sim=False):
 	return {"key": key, "number": number, "started_at": _at(minutes_ago), "duration": duration,
-			"direction": direction, "via_app": via_app}
+			"direction": direction, "via_app": via_app, "work_sim": work_sim}
 
 
 class TestCalls(TestCase):
@@ -78,6 +78,10 @@ class TestCalls(TestCase):
 		r = self._sync(self.caller, [_call(f"{self.p}y", 10, 30, number="+91 98950 55999", via_app=True)])
 		self.assertEqual(r["data"]["saved"], 1)
 		self.assertEqual(frappe.db.get_value("Mobile Call Log", {"sync_key": f"{self.caller}:{self.p}y"}, "source"), "Hipersign")
+		# ...or it was on the work SIM chosen in the app (every call there is work).
+		r = self._sync(self.caller, [_call(f"{self.p}z", 10, 30, number="+91 98950 55998", work_sim=True)])
+		self.assertEqual(r["data"]["saved"], 1)
+		self.assertEqual(frappe.db.get_value("Mobile Call Log", {"sync_key": f"{self.caller}:{self.p}z"}, "source"), "Phone App")
 
 	def test_visibility(self):
 		self._sync(self.caller, [_call(f"{self.p}v", 5, 20)])

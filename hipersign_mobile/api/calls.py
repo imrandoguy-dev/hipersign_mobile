@@ -68,8 +68,10 @@ def _recording_for(user: str, phone: str, when) -> str | None:
 
 @mobile_api(methods=("POST",))
 def sync(calls: str | list | None = None):
-	"""Upload calls: [{key, number, started_at (ISO), duration, direction, via_app,
-	party_doctype?, party?, activity?}]. Safe to resend: each key is stored once."""
+	"""Upload calls: [{key, number, started_at (ISO), duration, direction, via_app, work_sim?,
+	party_doctype?, party?, activity?}]. Safe to resend: each key is stored once.
+	work_sim: the call was on the work SIM chosen in the app's Settings, so it is a work call
+	even when the number isn't in ERP yet (it links when the number is added)."""
 	me = frappe.session.user
 	perms.require("customers", me)
 	limit_per_user("calls_sync", 20, 60)
@@ -113,7 +115,8 @@ def sync(calls: str | list | None = None):
 		from hipersign_mobile.services import prospects as hm_prospects
 
 		new_number = not party and frappe.db.exists(hm_prospects.DOCTYPE, {"phone": phone})
-		if not party and not via_app and not new_number:
+		work_sim = bool(c.get("work_sim"))
+		if not party and not via_app and not new_number and not work_sim:
 			skipped += 1  # not a work call: personal numbers are never stored
 			continue
 		direction = DIRECTIONS.get(str(c.get("direction") or "").lower(), "Outgoing")
