@@ -62,29 +62,60 @@ def find(business: str | None = None, places: str | None = None, count: str | in
 		raise frappe.ValidationError(str(e))
 
 
-@mobile_api(methods=("GET",))
-def get_list(tab: str | None = None, person: str | None = None, cursor: str | int | None = None, page_size: str | int | None = None):
-	me = frappe.session.user
-	perms.require("prospects", me)
-	statuses = TABS.get(tab or "to_call", TABS["to_call"])
-	filters = {"status": ["in", statuses]}
+def _scope(me: str, person: str | None) -> dict:
+	"""Whose numbers: your own, or (managers) everyone's / one caller's."""
 	if person and person != me:
 		if "team_view" not in perms.capabilities(me):
 			raise frappe.PermissionError("You can only see your own numbers.")
-		if person != "all":
-			filters["assigned_to"] = person
-	else:
-		filters["assigned_to"] = me
+		return {} if person == "all" else {"assigned_to": person}
+	return {"assigned_to": me}
+
+
+@mobile_api(methods=("GET",))
+def get_list(
+	tab: str | None = None,
+	person: str | None = None,
+	place: str | None = None,
+	industry: str | None = None,
+	cursor: str | int | None = None,
+	page_size: str | int | None = None,
+):
+	me = frappe.session.user
+	perms.require("prospects", me)
+	statuses = TABS.get(tab or "to_call", TABS["to_call"])
+	base = _scope(me, person)
+	if place := optional_str(place, 140):
+		base["place"] = place
+	if industry := optional_str(industry, 140):
+		base["search_text"] = industry
+	filters = {**base, "status": ["in", statuses]}
 	offset, limit = page_args(cursor, page_size)
 	order = "attempts asc, creation asc" if tab in (None, "to_call", "new", "not_connected") else "modified desc"
 	rows = frappe.get_all(svc.DOCTYPE, filters=filters, fields=["*"], order_by=order, start=offset, limit=limit + 1)
 	counts = {
-		t: frappe.db.count(svc.DOCTYPE, {**{k: v for k, v in filters.items() if k != "status"}, "status": ["in", s]})
+		t: frappe.db.count(svc.DOCTYPE, {**base, "status": ["in", s]})
 		for t, s in TABS.items() if t in ("to_call", "converted", "not_interested")
 	}
 	page = page_result([svc.serialize(r) for r in rows[:limit]], offset, limit, len(rows) > limit)
 	page["counts"] = counts
 	return page
+
+
+@mobile_api(methods=("GET",))
+def filters(person: str | None = None):
+	"""The places and industries (what was searched) among the numbers you can see, with counts."""
+	me = frappe.session.user
+	perms.require("prospects", me)
+	base = _scope(me, person)
+
+	def values(field: str) -> list:
+		rows = frappe.get_all(
+			svc.DOCTYPE, filters={**base, field: ["is", "set"]}, fields=[field, {"COUNT": "*", "as": "n"}],
+			group_by=field, order_by=f"{field} asc", limit=200,
+		)
+		return [{"value": r[field], "count": r.n} for r in rows]
+
+	return {"places": values("place"), "industries": values("search_text")}
 
 
 @mobile_api(methods=("POST",))

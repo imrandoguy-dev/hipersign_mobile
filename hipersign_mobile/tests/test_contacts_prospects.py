@@ -127,6 +127,19 @@ class TestContactsAndProspects(TestCase):
 		# A salesperson can't run searches.
 		self.assertFalse(call(prospects.find, self.sales, business="x", places="y", count=1, callers=self.sales)["success"])
 
+	def test_filter_by_place_and_industry_and_page(self):
+		nums = [f"+91 97473 {_n()}" for _ in range(3)]
+		self._find([_place(f"Pg {i}", n) for i, n in enumerate(nums)], callers=[self.caller])
+		f = call(prospects.filters, self.caller)["data"]
+		self.assertIn({"value": "Kochi", "count": f["places"][0]["count"]}, f["places"])
+		self.assertIn("solar companies", [x["value"] for x in f["industries"]])
+		page = call(prospects.get_list, self.caller, place="Kochi", industry="solar companies", page_size=2)["data"]
+		self.assertEqual(len(page["items"]), 2)
+		self.assertEqual(page["next_cursor"], "2")
+		rest = call(prospects.get_list, self.caller, place="Kochi", industry="solar companies", page_size=2, cursor="2")["data"]
+		self.assertGreaterEqual(len(rest["items"]), 1)
+		self.assertEqual(call(prospects.get_list, self.caller, place="Nowhere")["data"]["counts"]["to_call"], 0)
+
 	def test_call_over_5_seconds_makes_a_lead_shorter_stays(self):
 		long_n, short_n = f"+91 97469 {_n()}", f"+91 97460 {_n()}"
 		self._find([_place("Long Talk", long_n), _place("Short Ring", short_n)], callers=[self.caller])
