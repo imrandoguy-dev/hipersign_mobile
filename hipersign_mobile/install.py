@@ -184,6 +184,16 @@ CRM_LEAD_FIELDS = {
 			"label": "Address",
 			"insert_after": "hm_google_maps_url",
 		},
+		{
+			"fieldname": "hm_created_by",
+			"fieldtype": "Link",
+			"options": "User",
+			"label": "Deal Made By",
+			"insert_after": "hm_address",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Who made the deal (counted in the Hipersign daily report).",
+		},
 	],
 }
 

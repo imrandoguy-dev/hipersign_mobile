@@ -14,7 +14,7 @@ try:
 except ImportError:  # Frappe v15
 	from frappe.tests.utils import FrappeTestCase as TestCase
 
-from hipersign_mobile.api import activities, calls, customers, prospects, trials
+from hipersign_mobile.api import activities, calls, customers, prospects, reports, trials
 from hipersign_mobile.services import prospects as psvc
 from hipersign_mobile.tests.utils import call, future, make_customer, make_lead, make_slot, make_user
 
@@ -173,6 +173,33 @@ class TestContactsAndProspects(TestCase):
 		self.assertFalse(call(prospects.convert, self.sales2, prospect_id=todo["No Thanks"]["id"])["success"])
 
 	# ------------------------------------------------------------ lead -> deal
+
+	def test_report_counts_deals_made_and_follow_ups_that_got_meetings(self):
+		from hipersign_mobile.services import timeutil
+
+		lead = make_lead(f"HM Report {_n()}", f"+91 97474 {_n()}", owner=self.sales)
+		now = frappe.utils.now_datetime().replace(second=0, microsecond=0)
+		r = call(activities.create_activity, self.sales, title="Ring back", activity_type="Follow-up",
+				 reference_doctype="CRM Lead", reference_name=lead, start=now.isoformat(),
+				 end=(now + dt.timedelta(minutes=5)).isoformat(), idempotency_key=f"r{_n()}{_n()}")
+		self.assertTrue(r["success"], r)
+		start = future(3, 11)
+		m = call(activities.create_activity, self.sales, title="Demo", activity_type="Meeting",
+				 reference_doctype="CRM Lead", reference_name=lead, start=start.isoformat(),
+				 end=(start + dt.timedelta(hours=1)).isoformat(), idempotency_key=f"m{_n()}{_n()}")
+		self.assertTrue(m["success"], m)
+		deal = call(customers.convert_to_deal, self.sales, name=lead)["data"]["deal"]
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal, "hm_created_by"), self.sales)
+		today = str(dt.datetime.now(timeutil.user_tz(self.sales)).date())
+		rep = call(reports.get_report, self.sales, date=today)["data"]
+		self.assertIn(deal, [d["id"] for d in rep["deals"]])
+		self.assertGreaterEqual(rep["deals_new"], 1)
+		got = [x for x in rep["followup_meetings"] if x["party"] == deal]
+		self.assertEqual(len(got), 1, rep["followup_meetings"])
+		self.assertEqual(got[0]["followup"], str(r["data"]["activity"]["id"]))
+		# Someone else made nothing.
+		other = call(reports.get_report, self.sales2, date=today)["data"]
+		self.assertNotIn(deal, [d["id"] for d in other["deals"]])
 
 	def test_convert_lead_to_deal(self):
 		lead = make_lead(f"HM Convert {_n()}", f"+91 97472 {_n()}", owner=self.sales)

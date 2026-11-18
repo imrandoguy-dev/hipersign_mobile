@@ -160,6 +160,10 @@ def build(user: str, day: dt.date) -> dict:
 	from hipersign_mobile.api.calls import not_reached_count
 
 	new_not_reached = not_reached_count(user, start, end, new_only=True)
+	from hipersign_mobile.services import conversions
+
+	deals = conversions.deals_made(user, start, end)
+	to_meetings = conversions.followups_to_meetings(user, start, end)
 	target = call_targets.target_for(user)
 	done = sum(1 for i in items if i["done"])
 	not_done = sum(1 for i in items if i["open"])
@@ -176,6 +180,10 @@ def build(user: str, day: dt.date) -> dict:
 		"new_connected": st.new_connected,
 		"new_not_reached": new_not_reached,
 		"meetings_assigned": meetings,
+		"deals_new": len(deals),
+		"deals": deals,
+		"followups_to_meetings": len(to_meetings),
+		"followup_meetings": to_meetings,
 		"meeting_target": cint(target.get("meeting_target")) if target else None,
 		"call_target": cint(target.daily_target) if target else None,
 		# What counts towards the target, the way it is set in ERP (e.g. only new connected calls).
@@ -370,7 +378,7 @@ def build_timeline(user: str, day: dt.date, start, end, tz, tasks: list, items: 
 
 
 def has_content(r: dict) -> bool:
-	return bool(r["items"] or r["calls_made"] or r.get("meetings_assigned"))
+	return bool(r["items"] or r["calls_made"] or r.get("meetings_assigned") or r.get("deals_new"))
 
 
 def employees() -> list[str]:

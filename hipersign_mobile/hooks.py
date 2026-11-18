@@ -34,6 +34,7 @@ doc_events = {
 		"on_update": "hipersign_mobile.services.call_links.on_party_saved",
 	},
 	"CRM Deal": {
+		"before_insert": "hipersign_mobile.services.conversions.stamp_creator",
 		"after_insert": "hipersign_mobile.services.call_links.on_party_saved",
 		"on_update": "hipersign_mobile.services.call_links.on_party_saved",
 	},

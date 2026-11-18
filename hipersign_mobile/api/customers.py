@@ -587,6 +587,8 @@ def _convert(name: str, me: str) -> str:
 			deal = crm_convert(lead=name, doc=lead)
 		if not frappe.db.get_value("CRM Deal", deal, "deal_owner"):
 			frappe.db.set_value("CRM Deal", deal, "deal_owner", lead.lead_owner or me, update_modified=False)
+		if frappe.get_meta("CRM Deal").has_field("hm_created_by"):  # made as Administrator: record who did it
+			frappe.db.set_value("CRM Deal", deal, "hm_created_by", me, update_modified=False)
 		frappe.db.sql(
 			"""update `tabCRM Task` set reference_doctype='CRM Deal', reference_docname=%s
 			where reference_doctype='CRM Lead' and reference_docname=%s""",
